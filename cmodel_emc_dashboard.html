@@ -438,6 +438,42 @@
     </div>
 
     <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
+        <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">🛠️ 深度解析：Binarizer (二值化器) 的三大核心兵器</h4>
+        <p style="font-size: 0.95em; color: #475569;">在把十进制的语法元素喂给底层算盘前，硬件的 Binarizer 模块必须按特定算法将其“切碎”成 0 和 1 (Bins)。因为算术编码本质上是在二叉树上寻路。HEVC 中主要使用以下三种二值化算法：</p>
+        
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 15px;">
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px;">
+                <h5 style="margin-top: 0; color: #0284c7;">1. 一元码 (Unary)</h5>
+                <p style="font-size: 0.85em; color: #475569; line-height: 1.6;">最暴力的算法。数字 N 就用 N 个 <code>1</code> 加上一个 <code>0</code> 结尾来表示。<br><br>
+                <strong style="color: #0ea5e9;">举例：N = 3</strong><br>
+                输出 Bins：<code>1 1 1 0</code><br><br>
+                <em>用途：小数值或受限数值，如 <code>merge_idx</code>、<code>part_mode</code> 等。</em></p>
+            </div>
+            
+            <div style="background: #fdf4ff; border: 1px solid #f0abfc; padding: 15px; border-radius: 8px;">
+                <h5 style="margin-top: 0; color: #c026d3;">2. 截断莱斯编码 (Truncated Rice, TR)</h5>
+                <p style="font-size: 0.85em; color: #475569; line-height: 1.6;">将数字 X 拆分为商(q)和余数(r)。商用一元码编码，余数用定长二进制编码。参数 K 决定除数 (2^K)。<br><br>
+                <strong style="color: #d946ef;">举例：X=5, 参数K=1</strong><br>
+                除数是 2^1=2。<br>
+                商 q = 5>>1 = 2 (一元码编为 <code>1 1 0</code>)<br>
+                余 r = 5&1 = 1 (长度为K=1，编为定长 <code>1</code>)<br>
+                输出 Bins：<code>1 1 0 1</code><br><br>
+                <em>用途：极高频出现，但数值范围较大的量化系数绝对值的剩余部分 (<code>coeff_abs_level_remaining</code>)。</em></p>
+            </div>
+            
+            <div style="background: #fffbeb; border: 1px solid #fcd34d; padding: 15px; border-radius: 8px;">
+                <h5 style="margin-top: 0; color: #d97706;">3. k阶指数哥伦布 (Exp-Golomb, EGk)</h5>
+                <p style="font-size: 0.85em; color: #475569; line-height: 1.6;">专为大数值设计的动态长度编码。将数值加偏置后，拆分成“前缀”(表示长度的一元码)和“后缀”(纯二进制)。<br><br>
+                <strong style="color: #f59e0b;">举例：X=1, EG0阶</strong><br>
+                加偏置 X'=1+1=2 (二进制为 <code>10</code>)。<br>
+                拿掉最高位1，剩下 <code>0</code> 作为后缀。后缀长1位，所以前缀是1个0。<br>
+                标准输出是 <code>0 1 0</code> (HEVC中习惯0和1翻转，所以输出 <code>1 0</code>)。 <br><br>
+                <em>用途：运动矢量差分 (<code>MVD</code>) 等跨度极大的数值。</em></p>
+            </div>
+        </div>
+    </div>
+
+    <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
         <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">📖 一镜到底实战演练：编码 MVD_x = 1 的全生命周期</h4>
         <p style="font-size: 0.95em; color: #475569;">假设上一节的状态机（PU_INFO 层级）算出了当前块的运动矢量差分 <code>MVD_x = 1</code>。我们来跟踪它如何被吃进比特流。</p>
 
