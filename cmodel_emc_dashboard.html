@@ -732,25 +732,104 @@
                     BIN_E -->|2. 算术编码 <br> Arith Encoding| BITS_E(纯比特流 <br> 01011...)
                 end
                 
-                BITS_E -->|网络传输 / 硬盘存储| BITS_D
+                BITS_E -->|网络传输 / 硬盘存储| BITS_D(物理比特流 <br> 01011...)
                 
-                subgraph Decoder [解码端流水线 Decoder]
-                    direction LR
-                    BITS_D(纯比特流 <br> 01011...) -->|1. 算术解码 <br> Arith Decoding| BIN_D(Bin 数组 <br> 1,0,0)
-                    BIN_D -->|2. 反二值化 <br> Debinarization| SE_D(语法元素 <br> e.g. MVD=1)
+                subgraph Decoder [解码端微观死循环: Bin-by-Bin Decoding]
+                    direction TB
+                    FSM{1. 顶层状态机 FSM<br>决定当前要解什么<br>e.g. MVD}
+                    CTX[2. Context 模型<br>给出下一个 Bin 的概率]
+                    ARITH[3. 算术解码引擎<br>吃进 Bit, 吐出 1 个 Bin]
+                    MATCH{4. 反二值化匹配<br>收集 Bin 并尝试组合}
+                    SE_OUT(5. 成功解析！<br>输出完整语法元素 e.g. MVD=1)
+                    
+                    FSM -->|请求解码| CTX
+                    CTX -->|提供概率 p0/p1| ARITH
+                    BITS_D -.->|提供纯数据| ARITH
+                    ARITH -->|解出 1 个 Bin (e.g. '1')| MATCH
+                    MATCH -->|前缀不完整，继续要下一个 Bin| CTX
+                    MATCH -->|符合码表规则，组合成功！| SE_OUT
+                    SE_OUT -->|通知 FSM 进入下一个语法元素| FSM
                 end
                 
                 classDef default fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,color:#334155,rx:8,ry:8;
                 classDef enc fill:#e0f2fe,stroke:#38bdf8,color:#0369a1,stroke-width:2px;
                 classDef dec fill:#dcfce7,stroke:#4ade80,color:#15803d,stroke-width:2px;
                 classDef trans fill:#fee2e2,stroke:#f87171,color:#b91c1c,stroke-width:2px;
+                classDef loop fill:#fef08a,stroke:#eab308,color:#854d0e,stroke-width:2px;
                 
                 class SE_E,BIN_E enc;
                 class BITS_E,BITS_D trans;
-                class BIN_D,SE_D dec;
+                class CTX,ARITH,MATCH loop;
+                class FSM,SE_OUT dec;
                 
                 style Encoder fill:#f0f9ff,stroke:#bae6fd,stroke-dasharray: 5 5;
                 style Decoder fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5;
+        </div>
+    </div>
+
+    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: #8b5cf6;">7. 压轴大戏：16 个残差系数 (Coeff) 是怎么被吃掉的？</h2>
+    <p style="font-size: 0.95em; color: #475569;">当你看到上面的 <code>coeff_abs_level_remaining</code> 时，你猜测“是不是把 16 个像素值直接位拼接起来？”<br>
+    <strong>答案是：绝对不是！</strong> 视频压缩中最占体积的就是残差系数 (Coeff)，如果直接拼接，压缩率会奇差无比。HEVC 对系数的编码有着极度精妙的<strong>“多趟扫描 (Multi-pass Scanning)”</strong>机制。</p>
+
+    <div style="background: #f5f3ff; border: 1px solid #ddd6fe; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+        <h4 style="margin-top: 0; color: #6d28d9;">第一步：反向对角线扫描 (Reverse Diagonal Scan)</h4>
+        <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 300px;">
+                <p style="font-size: 0.9em; line-height: 1.6; color: #4c1d95;">
+                    变换量化后的 4x4 块中，左上角 (DC分量) 通常数值很大，右下角 (高频) 全是 0。编码器会先找到<strong>最后一个非零系数的坐标 (Last X/Y)</strong>，然后从那个位置开始，沿着<strong>反向对角线 (从右下往左上)</strong>一路扫描回左上角。<br><br>
+                    这种扫描把二维矩阵变成了一维数组，且保证了末尾全是密集的非零大数，极大地利于后续上下文概率模型的预测。
+                </p>
+            </div>
+            <!-- Matrix visualization -->
+            <div style="background: #fff; padding: 15px; border-radius: 8px; border: 1px dashed #c4b5fd; display: flex; flex-direction: column; align-items: center;">
+                <span style="font-size: 0.8em; color: #8b5cf6; margin-bottom: 8px;">反向对角线扫描示意 (从 1 回到 15)</span>
+                <table style="border-collapse: collapse; text-align: center; font-family: monospace; font-size: 1.1em; color: #5b21b6;">
+                    <tr>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; width: 35px; background: #ede9fe; font-weight: bold;">15</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; width: 35px; background: #ede9fe;">4</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; width: 35px;">0</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; width: 35px;">0</td>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; background: #ede9fe;">-2</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; background: #ede9fe;">1</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px;">0</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px;">0</td>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; background: #ede9fe; border-right: 2px solid #8b5cf6; border-bottom: 2px solid #8b5cf6;">1</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; color: #cbd5e1;">0</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; color: #cbd5e1;">0</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; color: #cbd5e1;">0</td>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; color: #cbd5e1;">0</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; color: #cbd5e1;">0</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; color: #cbd5e1;">0</td>
+                        <td style="border: 1px solid #e2e8f0; padding: 8px; color: #cbd5e1;">0</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <h4 style="margin-top: 25px; color: #6d28d9;">第二步：丧心病狂的“五趟扫描” (5-Pass Coding)</h4>
+        <p style="font-size: 0.9em; line-height: 1.6; color: #4c1d95;">
+            在扫描路线上，16 个系数并不是“读到一个就立刻把它编完”。相反，HEVC 会把这 16 个数据排成一列，然后<strong>对其进行 5 次独立检阅</strong>，每次只提取它们身上的一点特征！
+        </p>
+
+        <ul style="font-size: 0.9em; line-height: 1.8; color: #4c1d95; background: #fff; padding: 20px 40px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <li><strong>第 1 趟 (Pass 1)</strong>：只看 <code>sig_coeff_flag</code>。依次问扫描线上的系数：“你是 0 还是非 0？”。此时高度依赖精细的上下文模型。</li>
+            <li><strong>第 2 趟 (Pass 2)</strong>：对刚才说自己“非0”的系数，追问 <code>gt1_flag</code>：“你的绝对值大于 1 吗？”</li>
+            <li><strong>第 3 趟 (Pass 3)</strong>：对刚才说自己“>1”的系数，再追问 <code>gt2_flag</code>：“你的绝对值大于 2 吗？”</li>
+            <li><strong>第 4 趟 (Pass 4)</strong>：问所有非 0 系数的 <code>sign_flag</code>：“你是正数还是负数？”。正负号概率各 50%，直接走无脑的 Bypass 模式。</li>
+            <li><strong>第 5 趟 (Pass 5)</strong>：最后，对所有说自己“>2”（或者 >1）的系数，处理最复杂的 <code>coeff_abs_level_remaining</code>。此时巨大的剩余数值（如 15-2=13）用 <strong>截断莱斯(TR) + Exp-Golomb</strong> 编码，同样全部走吞吐量极高的 Bypass 模式！</li>
+        </ul>
+
+        <div style="background: #fff; border-left: 4px solid #8b5cf6; padding: 12px; border-radius: 4px; margin-top: 15px;">
+            <p style="font-size: 0.85em; margin: 0; color: #5b21b6;">
+                <strong>💡 为什么不一次性编码完一个像素，而非要分 5 趟？</strong><br>
+                因为前 3 趟 (是否为0，是否>1) 规律极强，非常适合算术引擎利用 <strong>上下文模型 (Context)</strong> 极限压缩。而符号(正负)和剩余大数(Remaining)毫无规律，如果跟前面混在一起算，会严重拖慢硬件算盘的速度。把它剥离出来放在最后 2 趟全部走 Bypass (不查表、不更新概率)，能让硬件吞吐率飙升！这就是算法为硬件让路、实现极致性能的体现。
+            </p>
         </div>
     </div>
 
