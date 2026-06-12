@@ -410,10 +410,13 @@
             <div style="font-weight: bold; color: var(--secondary);">7/8. CBF / COEFF</div>
             <div><strong>计算目标：</strong> 从 Level Residual FIFO 依次读取 <code>Luma</code>、<code>Cb</code>、<code>Cr</code> 的量化系数。对于非零块，计算 <code>Significant Map</code>（哪些位置有非零系数）、绝对值 <code>Abs</code> 和符号 <code>Sign</code>。<br><strong>结果用途：</strong> 这是 HEVC 中占据码流最大头的部分，CABAC 引擎会对非零系数的位置进行极致的概率上下文压缩。</div>
 
-        </div>
+    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px;">3. CABAC 底层数学引擎：算术编码与归一化 (Arithmetic Coding & Renorm)</h2>
+    <div style="background: #e0f2fe; padding: 15px; border-left: 4px solid #0288d1; border-radius: 0 6px 6px 0; color: #0f172a; font-size: 0.95em; margin-bottom: 20px;">
+        <strong>🔗 与上一节状态机的关系：</strong><br>
+        上一节的 <code>FSM 状态机</code> 相当于 <strong>控制中心 (Controller)</strong>，它负责走查四叉树，决定当前该编码什么语法元素（如 <code>skip_flag</code>）。<br>
+        而本节的 <code>CABAC 引擎</code> 则相当于 <strong>算术运算单元 (ALU)</strong>。当 FSM 决定好语法元素后，会将这个二进制比特 (Bin) 送入本引擎。本引擎不管上层业务，只负责操控 <code>Range</code> 和 <code>Low</code> 寄存器，通过切分线段和归一化，把比特真正“挤”入最终的 Bitstream。
     </div>
-
-    <h2>3. CABAC 数学算术编码与归一化 (Arithmetic Coding & Renorm)</h2>
+    
     <p>CABAC 的魔法在于算术编码，它不是给每个符号死板地分配固定位数的编码，而是将所有的信息映射到一条线段（概率区间）上。它维护着两个核心物理寄存器：<code>Range</code> (当前概率区间的宽度，9-bit) 和 <code>Low</code> (区间的起点)。</p>
 
     <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
