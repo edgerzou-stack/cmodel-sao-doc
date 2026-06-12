@@ -589,6 +589,14 @@
                         2. <strong>Low (底线)</strong>：10-bit 寄存器，<strong>初始值为 0</strong>，代表当前编码状态在数轴上的物理起点。<br>
                         <em>注：为了方便心算推演，下方的模拟器采用了一个近似的整数 <code>Range = 500</code> 作为初始状态。</em>
                     </p>
+                    <hr style="border: none; border-top: 1px dashed #bae6fd; margin: 10px 0;">
+                    <p style="font-size: 0.85em; margin: 0; color: #0c4a6e; line-height: 1.5;">
+                        <strong>🔥 深入灵魂的拷问：Range 怎么按概率切分？需要算乘法吗？</strong><br>
+                        你可能会想：切分区间不就是 <code>R_LPS = Range × P_LPS</code> 吗？在芯片里算乘法可是非常昂贵且缓慢的！<br>
+                        HEVC/H.264 的 CABAC 最伟大的发明之一就是<strong>“无乘法区间划分” (Multiplication-free)</strong>。它直接用查表 (LUT) 替代了乘法：<br>
+                        因为归一化机制的存在，<code>Range</code> 永远被卡在 <strong>[256, 510]</strong> 之间（最高位恒定为 1）。引擎只需提取 Range 的第 6、7 位作为“区间近似索引 (0~3)”，再结合当前上下文的“概率状态索引 pStateIdx (0~63)”，去查一张硬编码的 <strong>64x4 二维常量数组 (RangeTabLps)</strong>。<br>
+                        一瞬间，查表得出 <code>R_LPS</code>。然后加法器一跑：<code>R_MPS = Range - R_LPS</code>。整个切分过程 0 乘法、纯组合逻辑，这也是 CABAC 算盘能跑出超高吞吐率的底层根基！
+                    </p>
                 </div>
                 <p style="font-size: 0.9em; line-height: 1.4; color: #475569;">现在，我们把这串 Bins 里的第一个 <code>1</code> (假设这是小概率事件 LPS) 喂进底层的算术引擎。你可以手动点击按钮一步步推演底层运算过程，或者直接点击“自动推演”：</p>
                 
