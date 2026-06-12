@@ -138,33 +138,35 @@
 
     <h3>2.3 连续 4 个起步带 (subTypeIdx) 是如何确定的？(滑动窗口寻优)</h3>
     <p>虽然像素全域被划分为了 32 个 Band，但考虑到编码开销，SAO 规定每个 CTU <strong>最多只能选取连续的 4 个 Band</strong> 进行补偿。这 4 个连续 Band 的起步位置 (<code>subTypeIdx</code>) 是通过<strong>滑动窗口扫描</strong>决定的：</p>
+    
     <div class="mermaid">
     graph TD
-        subgraph 像素值全域 (共划分为 32 个 Band)
+        subgraph SG1 [像素值全域 32个Band]
             direction LR
-            B0[Band 0] --- B1[Band 1] --- B2[Band 2] --- B3[Band 3] --- B4[Band 4] --- B5[Band 5] --- B6[...] --- B31[Band 31]
+            B0[B0] --- B1[B1] --- B2[B2] --- B3[B3] --- B4[B4] --- B5[B5] --- B6[...] --- B31[B31]
         end
         
-        subgraph 编码器 RDO 滑动窗口扫描 (寻找最佳起步带 subTypeIdx)
-            W0("窗口 i=0 (含Band 0~3)") -.->|累加四个带的微观 Cost| C0((Cost 0))
-            W1("窗口 i=1 (含Band 1~4)") -.->|累加四个带的微观 Cost| C1((Cost 1))
-            W2("窗口 i=2 (含Band 2~5)") -.->|累加四个带的微观 Cost| C2((Cost 2))
-            W_dots("...") -.-> C_dots((...))
-            W28("窗口 i=28 (含Band 28~31)") -.->|累加四个带的微观 Cost| C28((Cost 28))
+        subgraph SG2 [编码器滑动窗口扫描 寻找最佳起步带]
+            W0[窗口 0 包含 B0 到 B3] -.-> C0((Cost 0))
+            W1[窗口 1 包含 B1 到 B4] -.-> C1((Cost 1))
+            W2[窗口 2 包含 B2 到 B5] -.-> C2((Cost 2))
+            W_dots[...] -.-> C_dots((...))
+            W28[窗口 28 包含 B28 到 B31] -.-> C28((Cost 28))
         end
         
-        C0 --> RDO{全局最小 Cost 抉择}
+        C0 --> RDO{抉择全局最小 Cost}
         C1 --> RDO
         C2 --> RDO
         C_dots --> RDO
         C28 --> RDO
         
-        RDO ==>|决出获胜者| Best("最佳起步带 (例如选定 i=2)")
-        Best -.->|最终效果| Result["仅对属于 Band 2, 3, 4, 5 的像素加偏置<br/>其余 Band 的像素不补偿"]
+        RDO ==> Best[最佳起步带 例如选定 i=2]
+        Best -.-> Result[仅对属于 B2, B3, B4, B5 的像素加偏置]
         
         style RDO fill:#ff9800,stroke:#333,stroke-width:2px,color:#fff
         style Best fill:#4caf50,stroke:#333,stroke-width:2px,color:#fff
     </div>
+    
     <p>在 C-Model 的代码中，这是一个由 <code>i</code> (从 0 遍历到 28) 控制的 <code>for</code> 循环。对于每个起步位置 <code>i</code>，编码器会将 <code>i, i+1, i+2, i+3</code> 这 4 个带独立算出来的最优代价 <code>tempCost</code> 加起来，最后挑选出总代价最小的那一组，将其起步位置记作 <code>subTypeIdx</code> 写入码流。</p>
 
     <h2>3. Edge Offset (EO - 边缘偏移) 模式</h2>
