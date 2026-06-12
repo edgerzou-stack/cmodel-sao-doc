@@ -413,8 +413,49 @@
         </div>
     </div>
 
-    <h2>3. CABAC 数学归一化引擎 (Renormalization)</h2>
-    <p>CABAC 的魔法在于算术编码，它维护着两个核心物理寄存器：<code>Range</code> (当前概率区间的宽度) 和 <code>Low</code> (区间的起点)。当概率区间随着编码不断被切分而缩小，当 <code>Range</code> 小于一个阈值（<code>0x100</code> 即 256）时，硬件就必须执行<strong>归一化 (Renormalization)</strong> 动作，也就是把编码结果“挤”到码流里去。</p>
+    <h2>3. CABAC 数学算术编码与归一化 (Arithmetic Coding & Renorm)</h2>
+    <p>CABAC 的魔法在于算术编码，它不是给每个符号死板地分配固定位数的编码，而是将所有的信息映射到一条线段（概率区间）上。它维护着两个核心物理寄存器：<code>Range</code> (当前概率区间的宽度，9-bit) 和 <code>Low</code> (区间的起点)。</p>
+
+    <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
+        <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">图解：算术编码的区间切分机制</h4>
+        <p style="font-size: 0.95em; color: #475569;">每一次编码一个 Bin（二进制位），硬件都会根据上下文模型（Context Model）预测出大概率符号 (MPS) 和小概率符号 (LPS) 的比例，并将 <code>Range</code> 切为两段。</p>
+        
+        <div style="display: flex; flex-direction: column; gap: 15px; margin: 20px 0;">
+            <!-- 初始区间 -->
+            <div style="position: relative; width: 100%; height: 50px; background: #e2e8f0; border-radius: 6px; display: flex; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                <div style="width: 100%; height: 100%; background: var(--primary); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">
+                    上一拍结束时的 Range 区间
+                </div>
+            </div>
+            
+            <div style="text-align: center; color: #94a3b8; font-size: 1.5em; line-height: 0.5;">⬇️ 切分 ⬇️</div>
+            
+            <!-- 切分后区间 -->
+            <div style="position: relative; width: 100%; height: 50px; border-radius: 6px; display: flex; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div style="width: 75%; height: 100%; background: #10b981; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; border-right: 3px solid #fff;">
+                    <span style="font-weight: bold; font-size: 1.1em;">MPS 概率区间 (R_MPS)</span>
+                    <span style="font-size: 0.85em; opacity: 0.9;">若输入=MPS，Range 缩小至此，Low 不变</span>
+                </div>
+                <div style="width: 25%; height: 100%; background: #f59e0b; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;">
+                    <span style="font-weight: bold; font-size: 1.1em;">LPS 区间 (R_LPS)</span>
+                    <span style="font-size: 0.85em; opacity: 0.9;">若输入=LPS，Range 缩小至此，Low 加上 R_MPS</span>
+                </div>
+            </div>
+            
+            <!-- 标尺 -->
+            <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: #64748b; font-family: monospace; font-weight: bold; position: relative;">
+                <span>| 起点: Low</span>
+                <span style="position: absolute; left: 75%; transform: translateX(-50%);">| Low + R_MPS (跳跃点)</span>
+                <span>终点: Low + Range |</span>
+            </div>
+        </div>
+        
+        <div style="background: #e3f2fd; padding: 15px; border-left: 4px solid var(--secondary); border-radius: 0 6px 6px 0; color: #333; font-size: 0.95em; margin-top: 20px;">
+            <strong>💡 为什么需要归一化 (Renormalization)？</strong><br>
+            不论是编码 MPS 还是 LPS，<code>Range</code> 都会不断变小。由于硬件寄存器位宽有限（只有 9 bit，最大值 511），当区间被“挤压”得太小（<code>Range &lt; 0x0100</code>，即小于 256）时，就失去了继续切分的精度。
+            此时硬件必须强制把 Range 放大（左移乘 2），并从 Low 中“挤出”溢出的高位比特，写入 Bitstream，这就是归一化！
+        </div>
+    </div>
 
     <div style="background: #fafafa; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 30px 0;">
         <div style="display: flex; gap: 20px; margin-bottom: 20px;">
