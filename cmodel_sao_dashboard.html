@@ -359,8 +359,14 @@
             <div>
                 <h4 style="margin: 0; color: #4fc3f7;">[▶ 互动演示] EO_0 (水平方向) 像素级地毯式扫描</h4>
                 <p style="margin: 5px 0 0 0; font-size: 13px; color: #888;">* 图注：点击按钮，观察 1x3 窗口如何遍历寻找“谷底”，体检报告 count 是如何累加的。</p>
+                <div style="margin-top: 10px; padding: 10px; background: rgba(79,195,247,0.1); border-left: 4px solid #4fc3f7; font-size: 13px; line-height: 1.6;">
+                    <strong style="color:#4fc3f7;">💡 图例说明 (与 BO 动画的区别)：</strong><br>
+                    1. 这里的每一个方块代表 <strong>1 个真实的物理像素点</strong>（这是一个 6x6 的微缩版 CTU）。<br>
+                    2. 方块里的数字是该像素当前的 <strong>亮度值 (Luma)</strong>。<br>
+                    3. 扫描框在真实物理空间中移动，黄色的高亮框代表找到了一个“谷底”像素。
+                </div>
             </div>
-            <button id="playEoBtn" style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.3s;">开始扫描 CTU</button>
+            <button id="playEoBtn" style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.3s; min-width: 140px; height: 40px;">开始扫描 CTU</button>
         </div>
         
         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
