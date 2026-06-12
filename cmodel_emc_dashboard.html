@@ -417,45 +417,121 @@
     <p>CABAC 的魔法在于算术编码，它不是给每个符号死板地分配固定位数的编码，而是将所有的信息映射到一条线段（概率区间）上。它维护着两个核心物理寄存器：<code>Range</code> (当前概率区间的宽度，9-bit) 和 <code>Low</code> (区间的起点)。</p>
 
     <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
-        <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">图解：算术编码的区间切分机制</h4>
-        <p style="font-size: 0.95em; color: #475569;">每一次编码一个 Bin（二进制位），硬件都会根据上下文模型（Context Model）预测出大概率符号 (MPS) 和小概率符号 (LPS) 的比例，并将 <code>Range</code> 切为两段。</p>
+        <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">📖 交互式案例演示：以编码 [MPS, LPS] 为例的完整推演</h4>
+        <p style="font-size: 0.95em; color: #475569;">与其死记硬背公式，不如我们亲手推演一遍！假设我们要连续编码两个符号：<strong>第一个是大概率(MPS)，第二个是小概率(LPS)</strong>。为了方便演示，假设上下文模型预测 LPS 的概率恒定为 20% (即 R_LPS = Range * 0.2)。</p>
         
-        <div style="display: flex; flex-direction: column; gap: 15px; margin: 20px 0;">
-            <!-- 初始区间 -->
-            <div style="position: relative; width: 100%; height: 50px; background: #e2e8f0; border-radius: 6px; display: flex; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
-                <div style="width: 100%; height: 100%; background: var(--primary); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.1em; letter-spacing: 2px;">
-                    上一拍结束时的 Range 区间
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #cbd5e1; margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div style="font-weight: bold; color: var(--primary); font-size: 1.1em;" id="tutor-step-title">初始状态：准备就绪</div>
+                <button id="btn-tutor-next" style="background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">执行下一步</button>
+            </div>
+            
+            <div style="color: #64748b; font-family: monospace; font-size: 1.1em; margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 4px; border: 1px dashed #cbd5e1;" id="tutor-math">
+                当前 Range = 500, Low = 0
+            </div>
+
+            <!-- 动态比例尺和线段 -->
+            <div style="position: relative; width: 100%; height: 60px; background: #e2e8f0; border-radius: 6px; margin-top: 30px; margin-bottom: 10px;">
+                <!-- 实际占据的 Range 宽度和起始点 Low -->
+                <div id="tutor-bar" style="position: absolute; left: 0%; width: 100%; height: 100%; background: var(--primary); transition: all 0.5s ease-in-out; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; overflow: hidden;">
+                    Range
                 </div>
             </div>
             
-            <div style="text-align: center; color: #94a3b8; font-size: 1.5em; line-height: 0.5;">⬇️ 切分 ⬇️</div>
-            
-            <!-- 切分后区间 -->
-            <div style="position: relative; width: 100%; height: 50px; border-radius: 6px; display: flex; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <div style="width: 75%; height: 100%; background: #10b981; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; border-right: 3px solid #fff;">
-                    <span style="font-weight: bold; font-size: 1.1em;">MPS 概率区间 (R_MPS)</span>
-                    <span style="font-size: 0.85em; opacity: 0.9;">若输入=MPS，Range 缩小至此，Low 不变</span>
-                </div>
-                <div style="width: 25%; height: 100%; background: #f59e0b; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;">
-                    <span style="font-weight: bold; font-size: 1.1em;">LPS 区间 (R_LPS)</span>
-                    <span style="font-size: 0.85em; opacity: 0.9;">若输入=LPS，Range 缩小至此，Low 加上 R_MPS</span>
-                </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: #94a3b8; font-family: monospace;">
+                <span id="tutor-label-low">Low = 0</span>
+                <span id="tutor-label-high">Low+Range = 500</span>
             </div>
-            
-            <!-- 标尺 -->
-            <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: #64748b; font-family: monospace; font-weight: bold; position: relative;">
-                <span>| 起点: Low</span>
-                <span style="position: absolute; left: 75%; transform: translateX(-50%);">| Low + R_MPS (跳跃点)</span>
-                <span>终点: Low + Range |</span>
-            </div>
-        </div>
-        
-        <div style="background: #e3f2fd; padding: 15px; border-left: 4px solid var(--secondary); border-radius: 0 6px 6px 0; color: #333; font-size: 0.95em; margin-top: 20px;">
-            <strong>💡 为什么需要归一化 (Renormalization)？</strong><br>
-            不论是编码 MPS 还是 LPS，<code>Range</code> 都会不断变小。由于硬件寄存器位宽有限（只有 9 bit，最大值 511），当区间被“挤压”得太小（<code>Range &lt; 0x0100</code>，即小于 256）时，就失去了继续切分的精度。
-            此时硬件必须强制把 Range 放大（左移乘 2），并从 Low 中“挤出”溢出的高位比特，写入 Bitstream，这就是归一化！
         </div>
     </div>
+
+    <script>
+        const tutorSteps = [
+            {
+                title: "初始状态",
+                math: "当前 Range = 500, Low = 0",
+                barLeft: 0,
+                barWidth: 100, // 500 占满 100% 相对宽度
+                lblLow: 0,
+                lblHigh: 500,
+                color: "var(--primary)"
+            },
+            {
+                title: "Step 1: 准备编码第一个符号 (MPS)",
+                math: "引擎计算切分点: R_LPS = 500 * 0.2 = 100。 \n推导出 R_MPS = 500 - 100 = 400。",
+                barLeft: 0,
+                barWidth: 100,
+                lblLow: 0,
+                lblHigh: 500,
+                color: "var(--primary)"
+            },
+            {
+                title: "Step 2: 确认输入为 MPS (大概率)",
+                math: "编码 MPS：Range 缩短为 R_MPS(400)，Low 保持起点(0)不动。",
+                barLeft: 0,
+                barWidth: 80, // 400/500
+                lblLow: 0,
+                lblHigh: 400,
+                color: "#10b981" // 绿
+            },
+            {
+                title: "Step 3: 准备编码第二个符号 (LPS)",
+                math: "引擎基于新的区间继续切分: R_LPS = 400 * 0.2 = 80。 \n推导出 R_MPS = 400 - 80 = 320。",
+                barLeft: 0,
+                barWidth: 80,
+                lblLow: 0,
+                lblHigh: 400,
+                color: "#10b981"
+            },
+            {
+                title: "Step 4: 确认输入为 LPS (小概率)",
+                math: "编码 LPS：Low 必须跳过 MPS 占据的区间 (Low = 0 + 320 = 320)。\nRange 剧烈缩短为 R_LPS(80)。",
+                barLeft: 64, // 320/500 = 64%
+                barWidth: 16, // 80/500 = 16%
+                lblLow: 320,
+                lblHigh: 400,
+                color: "#f59e0b" // 橙
+            },
+            {
+                title: "Step 5: 触发硬件底线的归一化 (Renormalization)!",
+                math: "⚠️ 警告：当前 Range=80，已经小于硬件下限(256)！\n必须执行归一化：将 Range 强制左移乘 2 (80->160)。\n同时 Low 也会左移，超出的高位溢出变成 Bitstream 写入码流！",
+                barLeft: 64,
+                barWidth: 32, // 放大了两倍
+                lblLow: "溢出左移...",
+                lblHigh: "...",
+                color: "#ef4444" // 红
+            }
+        ];
+
+        let curTutorStep = 0;
+        const btnTutorNext = document.getElementById('btn-tutor-next');
+        const tutorTitle = document.getElementById('tutor-step-title');
+        const tutorMath = document.getElementById('tutor-math');
+        const tutorBar = document.getElementById('tutor-bar');
+        const lblLow = document.getElementById('tutor-label-low');
+        const lblHigh = document.getElementById('tutor-label-high');
+
+        btnTutorNext.addEventListener('click', () => {
+            curTutorStep++;
+            if (curTutorStep >= tutorSteps.length) {
+                curTutorStep = 0; // 重置循环
+                btnTutorNext.innerText = "开始推演";
+            } else if (curTutorStep === tutorSteps.length - 1) {
+                btnTutorNext.innerText = "重新开始";
+            } else {
+                btnTutorNext.innerText = "执行下一步";
+            }
+
+            const step = tutorSteps[curTutorStep];
+            tutorTitle.innerText = step.title;
+            tutorMath.innerText = step.math;
+            tutorBar.style.left = step.barLeft + "%";
+            tutorBar.style.width = step.barWidth + "%";
+            tutorBar.style.background = step.color;
+            lblLow.innerText = "Low = " + step.lblLow;
+            lblHigh.innerText = "Low+Range = " + step.lblHigh;
+        });
+    </script>
 
     <div style="background: #fafafa; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 30px 0;">
         <div style="display: flex; gap: 20px; margin-bottom: 20px;">
