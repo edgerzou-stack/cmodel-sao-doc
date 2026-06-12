@@ -412,7 +412,87 @@
         </div>
     </div>
 
+    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">2.4 全链路实战演练：一个 CU 块的奇幻漂流 (从像素到码流)</h2>
+    <p>为了把前面的状态机和后面的 CABAC 数学引擎彻底串联起来，我们以一个 <strong>8x8 大小的 Inter CU</strong> 为例，看看高层的“像素值”和“预测信息”是如何被一步步“二值化”成 CABAC 能吃进去的 0 和 1 的。</p>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; margin: 30px 0;">
+        
+        <!-- Step 1 -->
+        <div style="display: flex; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background: #e0e7ff; width: 60px; display: flex; align-items: center; justify-content: center; font-size: 2em; font-weight: bold; color: #4338ca;">1</div>
+            <div style="padding: 20px; flex: 1;">
+                <h4 style="margin: 0 0 10px 0; color: #3730a3;">高层信息提取 (像素与运动估计)</h4>
+                <div style="display: flex; gap: 15px; font-size: 0.9em; color: #475569;">
+                    <div style="flex: 1; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+                        <strong>1. 运动矢量 (MV)：</strong> 编码器在参考帧中找到了最相似的块，得到 <code>MV = (5, 2)</code>。通过周围块预测出 PMV=(4, 2)，相减得到 <strong><code>MVD = (1, 0)</code></strong>。这是需要写入码流的第一个核心语法元素。
+                    </div>
+                    <div style="flex: 1; background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+                        <strong>2. 像素残差 (Residual)：</strong> 将当前块的 64 个原始像素减去参考块的 64 个像素，得到了一副正负交错的 <strong>残差图像</strong>（这是原始的高频像素数据）。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; color: #cbd5e1; font-size: 1.5em; line-height: 0.5;">⬇️</div>
+
+        <!-- Step 2 -->
+        <div style="display: flex; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div style="background: #e0f2fe; width: 60px; display: flex; align-items: center; justify-content: center; font-size: 2em; font-weight: bold; color: #0284c7;">2</div>
+            <div style="padding: 20px; flex: 1;">
+                <h4 style="margin: 0 0 10px 0; color: #075985;">变换与量化 (Transform & Quantization)</h4>
+                <p style="margin: 0 0 10px 0; font-size: 0.9em; color: #475569;">残差图像通过 DCT (离散余弦变换) 转换为频域，再除以量化步长 (QStep)。高频细节被抹零，得到了一个稀疏的 8x8 <strong>量化系数矩阵 (COEFF)</strong>。</p>
+                <div style="background: #f1f5f9; padding: 10px; font-family: monospace; font-size: 0.85em; color: #0f172a; border-radius: 6px; text-align: center; letter-spacing: 2px;">
+                    [ 5, -2,  0,  0,  0,  0,  0,  0 ]<br>
+                    [ 0,  1,  0,  0,  0,  0,  0,  0 ]<br>
+                    [ 0,  0,  0,  0,  0,  0,  0,  0 ]<br>... (剩下全0)
+                </div>
+                <div style="font-size: 0.85em; color: #64748b; margin-top: 5px;">至此，图像像素彻底变成了少量的数字符号：<code>MVD=(1,0)</code> 和 <code>Coeffs=[5, -2, 1...]</code>。</div>
+            </div>
+        </div>
+
+        <div style="text-align: center; color: #cbd5e1; font-size: 1.5em; line-height: 0.5;">⬇️</div>
+
+        <!-- Step 3 -->
+        <div style="display: flex; background: #fff; border-radius: 12px; border: 1px solid #f87171; overflow: hidden; box-shadow: 0 4px 10px rgba(248,113,113,0.1);">
+            <div style="background: #fee2e2; width: 60px; display: flex; align-items: center; justify-content: center; font-size: 2em; font-weight: bold; color: #dc2626;">3</div>
+            <div style="padding: 20px; flex: 1;">
+                <h4 style="margin: 0 0 10px 0; color: #991b1b;">核心桥梁：二值化 (Binarization)</h4>
+                <p style="margin: 0 0 10px 0; font-size: 0.9em; color: #475569;">CABAC 底层算盘是不认识 "5" 或者 "-2" 这种十进制数字的，它只认识 <code>0</code> 和 <code>1</code>。这一步通过查表算法，将十进制拆成硬件可处理的 <strong>Bin 数组</strong>。</p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="background: #fef2f2; border: 1px solid #fca5a5; padding: 12px; border-radius: 6px; font-size: 0.85em; line-height: 1.8;">
+                        <strong style="color:#b91c1c;">对 MVD X=1 的二值化：</strong><br>
+                        绝对值 1 经过指数哥伦布编码 (Exp-Golomb)，会被映射成类似 <code>1, 0</code> 的比特流。<br>
+                        正负号 Sign 为正，单独编码为 <code>0</code>。<br>
+                        <strong>👉 MVD X 吐出 Bins:</strong> <code style="color:#b91c1c; font-weight:bold; font-size:1.1em; background:#fff; padding:2px 4px;">1, 0, 0</code>
+                    </div>
+                    <div style="background: #fef2f2; border: 1px solid #fca5a5; padding: 12px; border-radius: 6px; font-size: 0.85em; line-height: 1.8;">
+                        <strong style="color:#b91c1c;">对 Coeff=5 的二值化 (截断莱斯)：</strong><br>
+                        它是非零系数吗？<code>sig_flag = 1</code><br>
+                        绝对值大于1吗？<code>gt1_flag = 1</code><br>
+                        绝对值大于2吗？<code>gt2_flag = 1</code><br>
+                        余数 (5-3=2) EGk编码：<code>rem = 0, 1, 1</code><br>
+                        符号为正：<code>sign = 0</code><br>
+                        <strong>👉 Coeff=5 吐出 Bins:</strong> <code style="color:#b91c1c; font-weight:bold; font-size:1.1em; background:#fff; padding:2px 4px;">1, 1, 1, 0, 1, 1, 0</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; color: #cbd5e1; font-size: 1.5em; line-height: 0.5;">⬇️</div>
+
+        <!-- Step 4 -->
+        <div style="display: flex; background: #fff; border-radius: 12px; border: 1px solid #10b981; overflow: hidden; box-shadow: 0 4px 6px rgba(16,185,129,0.1);">
+            <div style="background: #dcfce7; width: 60px; display: flex; align-items: center; justify-content: center; font-size: 2em; font-weight: bold; color: #16a34a;">4</div>
+            <div style="padding: 20px; flex: 1;">
+                <h4 style="margin: 0 0 10px 0; color: #166534;">CABAC 算术熵编码 (下一节)</h4>
+                <p style="margin: 0 0 0 0; font-size: 0.9em; color: #475569;">现在，第三步产生的这些成百上千个类似 <code>[1, 1, 1, 0, 1, 1, 0...]</code> 的二进制 Bins，会被一个一个送入下一节（第 3 节）介绍的 <strong>CABAC 底层数学引擎</strong>。引擎根据上下文概率模型不断切分 Range 寄存器，最终挤压成极致压缩的 Bitstream 码流文件 (.265)。</p>
+            </div>
+        </div>
+    </div>
+
     <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px;">3. CABAC 底层数学引擎：算术编码与归一化 (Arithmetic Coding & Renorm)</h2>
+
     <div style="background: #e0f2fe; padding: 15px; border-left: 4px solid #0288d1; border-radius: 0 6px 6px 0; color: #0f172a; font-size: 0.95em; margin-bottom: 20px;">
         <strong>🔗 与上一节状态机的关系：</strong><br>
         上一节的 <code>FSM 状态机</code> 相当于 <strong>控制中心 (Controller)</strong>，它负责走查四叉树，决定当前该编码什么语法元素（如 <code>skip_flag</code>）。<br>
