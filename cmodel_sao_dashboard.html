@@ -285,6 +285,16 @@
     
     <p>在 C-Model 的代码中，这是一个由 <code>i</code> (从 0 遍历到 28) 控制的 <code>for</code> 循环。对于每个起步位置 <code>i</code>，编码器会将 <code>i, i+1, i+2, i+3</code> 这 4 个带独立算出来的最优代价 <code>tempCost</code> 加起来，最后挑选出总代价最小的那一组，将其起步位置记作 <code>subTypeIdx</code> 写入码流。</p>
 
+    <div class="highlight" style="background-color: #e3f2fd; border-color: #2196f3; margin-top: 20px;">
+        <strong>🤔 深度拷问：为什么一定要挑 Cost 最小的？挑“包含像素最多”或“失真误差最大”的 4 个筐不行吗？</strong><br>
+        <p style="margin-top: 8px;">在 HEVC 标准下，为了节省码流，我们针对每个 CTU <strong>只能发射一次补偿“子弹”</strong>（即只能选定连续 4 个筐）。为了让这颗唯一的子弹价值最大化，必须依赖 <code>Cost = 失真 + &lambda; &times; 码率</code> 来算一笔经济账：</p>
+        <ul style="margin-bottom: 0;">
+            <li style="margin-bottom: 5px;">❌ <strong>如果单挑“像素最多”的筐：</strong> 比如一大片完美的平滑蓝天。由于它本身压缩得很好，失真几乎为 0（无需修补）。你强行选中它，不仅对画质无提升，还白白在码流里浪费了 bit 去传输 <code>Offset=0</code>，纯属得不偿失。</li>
+            <li style="margin-bottom: 5px;">❌ <strong>如果单挑“失真最大”的筐：</strong> 比如一小撮极其复杂的边缘毛刺。虽然修补它能降不少失真，但其所需的 Offset 绝对值极大（比如 15）。在底层编码中，传输 15 需要非常长的二进制位宽（Rate 暴增）。你花费了巨大的流量代价，却只救活了寥寥几个像素，从整部电影的视角来看是一笔亏本买卖。</li>
+            <li>✅ <strong>挑“Cost 最小”的筐：</strong> 在打擂台时，Cost 下降得最多，本质上是在寻找 <strong>“投资回报率 (ROI)” 最高</strong>的 4 个筐。这意味着这 4 个筐完美满足了：<strong>受众广</strong>（像素足够多）、<strong>有提升空间</strong>（确实存在可修补失真）、且 <strong>维修成本低</strong>（所需的 Offset 参数小，极省码率）。这就是“花最少 bit 的钱，办最大画质提升的事”！</li>
+        </ul>
+    </div>
+
     <h2>3. Edge Offset (EO - 边缘偏移) 模式</h2>
     <p>EO 模式利用像素间的局部空间梯度，比较当前像素与其邻居的大小关系，根据分类 (Class) 来补偿。</p>
     
