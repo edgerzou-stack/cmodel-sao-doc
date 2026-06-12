@@ -178,13 +178,30 @@
     </div>
     
     <div class="highlight">
-        <strong>💡 设计约束 (强制置零)：</strong><br>
-        C-Model 中存在一段强硬判定：Class 1 和 2 只能使用正偏移 (提亮谷底)，Class 3 和 4 只能使用负偏移 (压暗山顶)。<br>
-        在计算出初始预估偏移量 <code>init_guess</code> 后，如果 Class 1/2 算出了负值，或者 Class 3/4 算出了正值，则 <strong>直接将 offset 强制归 0</strong>。这极大降低了传错方向参数的概率，也省去了符号位的编码。
+        <strong>💡 设计约束背后深层的物理意义 (防振铃效应)：</strong><br>
+        为什么 C-Model 强硬规定 Class 1/2 必须是正偏移，Class 3/4 必须是负偏移？<br>
+        这是因为在视频压缩中，高频量化会引发著名的 <strong>Gibbs现象 (振铃效应)</strong>：<br>
+        1. <strong>谷底 (Class 1) 经常发生 Undershoot (下冲)</strong>：原本是 10 的亮度，重建后变成了 5 (变得更暗)。所以 <code>Org - Rec > 0</code>，必须加<strong>正偏移</strong>把它拉亮回来。<br>
+        2. <strong>山顶 (Class 4) 经常发生 Overshoot (过冲)</strong>：原本 200 的亮度，重建后飙到了 210 (变得过曝)。所以 <code>Org - Rec < 0</code>，必须加<strong>负偏移</strong>把它压暗回来。<br>
+        如果在谷底算出了负偏移，说明数据是异常的噪点而非典型的量化失真，C-Model 会<strong>直接将 offset 强制归 0</strong>，放弃补偿。
     </div>
 
-    <h3>3.3 EO 偏移量抉择特征</h3>
-    <p>与 BO 的计算流程完全一致，EO 也是先求出 <code>offsetOrg >> c</code> 的预估值再迭代。但在 C-Model 代码中，EO 受到严格的符号约束：</p>
+    <h3>3.3 EO 偏移量精确计算与举例</h3>
+    <p>EO 偏移量的计算在 <code>estIterOffset</code> 中受到严格的符号约束，其数值通常很小，在 8-bit 视频中最大偏移除外被限制在 <code>[-7, 7]</code> 之间。</p>
+
+    <div class="highlight" style="background-color: #f3e5f5; border-color: #ab47bc;">
+        <strong>📝 EO 精确举例计算：</strong><br>
+        假设在一个 CTU 中使用 <strong>水平方向 (EO_0)</strong> 进行扫描，找出了 <strong>16</strong> 个属于 <strong>Class 1 (局部极小/谷底)</strong> 的像素 (<code>count = 16</code>)。<br>
+        因为量化的下冲效应，这 16 个像素普遍比原图暗，它们的 (原始值 - 重建值) 误差和为：<code>offsetOrg = +48</code>。<br>
+        <ul>
+            <li><strong>估算均值：</strong> <code>c = floor(log2(16)) = 4</code>。</li>
+            <li><strong>初始预估值：</strong> <code>init_guess = 48 >> 4 = 3</code>。因为是正数，符合 Class 1 的要求，保留。</li>
+        </ul>
+        假设进入迭代寻优：<br>
+        尝试 <strong>offset = 3</strong>：<code>&Delta;Dist = 16 * 3&sup2; - 48 * 3 * 2 = 144 - 288 = -144</code>。码率 <code>Rate = ABS(3) + 1 = 4</code>，<code>Cost&harr;3 = -144 + 4 * &lambda;</code>。<br>
+        尝试 <strong>offset = 2</strong>：<code>&Delta;Dist = 16 * 2&sup2; - 48 * 2 * 2 = 64 - 192 = -128</code>。码率 <code>Rate = ABS(2) + 1 = 3</code>，<code>Cost&harr;2 = -128 + 3 * &lambda;</code>。<br>
+        最终通过比较 <code>Cost</code>，编码器会决定给这 16 个谷底像素统一加上 <strong>+3</strong> 或 <strong>+2</strong> 的亮度补偿，以此抹平振铃下冲。
+    </div>
     <ul>
         <li>在 <code>estIterOffset</code> 寻优时，因为只有单向尝试（非正或非负），因此迭代只会朝一个确定方向归零。</li>
         <li>计算位元消耗 <code>tempRate</code> 时，EO 的开销模型为 <code>ABS(offset) + 1</code> (除了边界修正)，比 BO 略少，因为 EO 绝对不需要传输偏移符号。</li>
