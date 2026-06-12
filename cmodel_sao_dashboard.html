@@ -144,8 +144,13 @@
             <div>
                 <h4 style="margin: 0; color: #4fc3f7;">[▶ 互动演示] BO 最佳起步带 (subTypeIdx) 滑动窗口寻优</h4>
                 <p style="margin: 5px 0 0 0; font-size: 13px; color: #888;">* 图注：点击右侧按钮，直观体验 C-Model 如何通过遍历 29 次窗口挑选出 Cost 最小的起步带。</p>
+                <div style="margin-top: 10px; padding: 10px; background: rgba(255,152,0,0.1); border-left: 4px solid #ff9800; font-size: 13px; line-height: 1.6;">
+                    <strong style="color:#ff9800;">⚠️ 核心防误解提示 (图例说明)：</strong><br>
+                    1. <strong>横向的 0~31：</strong> 代表的是把 0-255 亮度平分后的 <strong>32 个亮度收纳筐 (Bands)</strong>，<strong>绝不是</strong>图像里的像素点序列！<br>
+                    2. <strong>决策范围：</strong> 算出的最优起步带 (如 17~20) 是对 <strong>整个 CTU (如 64x64=4096个像素)</strong> 下达的全局命令！不管像素在第几行，只要其亮度落在这 4 个筐内，就会被补偿。
+                </div>
             </div>
-            <button id="playBtn" style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.3s;">开始扫描</button>
+            <button id="playBtn" style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.3s; min-width: 100px;">开始扫描</button>
         </div>
         
         <div style="position: relative; height: 50px; display: flex; align-items: center; background: #2d2d2d; border-radius: 4px; padding: 0 10px; margin-bottom: 20px;">
