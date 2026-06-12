@@ -723,47 +723,8 @@
     <p style="font-size: 0.95em; color: #475569;">为了让你对“语法元素是如何变成码流，又如何从码流中复活”有一个全局的体感，我为你绘制了最后这张 <strong>CABAC 编解码对称架构图</strong>。你可以清晰地看到，解码器在做的所有事情，就是把编码器走过的路，原封不动地倒着走一遍：</p>
 
     <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
-        <div class="mermaid" style="display:flex; justify-content:center; overflow-x:auto;">
-            %%{init: {'theme': 'base', 'themeVariables': { 'primaryTextColor': '#1e293b', 'fontFamily': 'Inter, sans-serif' }}}%%
-            graph TD
-                subgraph Encoder [编码端流水线 Encoder]
-                    direction LR
-                    SE_E(语法元素 <br> e.g. MVD=1) -->|1. 二值化 <br> Binarization| BIN_E(Bin 数组 <br> 1,0,0)
-                    BIN_E -->|2. 算术编码 <br> Arith Encoding| BITS_E(纯比特流 <br> 01011...)
-                end
-                
-                BITS_E -->|网络传输 / 硬盘存储| BITS_D(物理比特流 <br> 01011...)
-                
-                subgraph Decoder [解码端微观死循环: Bin-by-Bin Decoding]
-                    direction TB
-                    FSM{1. 顶层状态机 FSM<br>决定当前要解什么<br>e.g. MVD}
-                    CTX[2. Context 模型<br>给出下一个 Bin 的概率]
-                    ARITH[3. 算术解码引擎<br>吃进 Bit, 吐出 1 个 Bin]
-                    MATCH{4. 反二值化匹配<br>收集 Bin 并尝试组合}
-                    SE_OUT(5. 成功解析！<br>输出完整语法元素 e.g. MVD=1)
-                    
-                    FSM -->|请求解码| CTX
-                    CTX -->|提供概率 p0/p1| ARITH
-                    BITS_D -.->|提供纯数据| ARITH
-                    ARITH -->|解出 1 个 Bin (e.g. '1')| MATCH
-                    MATCH -->|前缀不完整，继续要下一个 Bin| CTX
-                    MATCH -->|符合码表规则，组合成功！| SE_OUT
-                    SE_OUT -->|通知 FSM 进入下一个语法元素| FSM
-                end
-                
-                classDef default fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,color:#334155,rx:8,ry:8;
-                classDef enc fill:#e0f2fe,stroke:#38bdf8,color:#0369a1,stroke-width:2px;
-                classDef dec fill:#dcfce7,stroke:#4ade80,color:#15803d,stroke-width:2px;
-                classDef trans fill:#fee2e2,stroke:#f87171,color:#b91c1c,stroke-width:2px;
-                classDef loop fill:#fef08a,stroke:#eab308,color:#854d0e,stroke-width:2px;
-                
-                class SE_E,BIN_E enc;
-                class BITS_E,BITS_D trans;
-                class CTX,ARITH,MATCH loop;
-                class FSM,SE_OUT dec;
-                
-                style Encoder fill:#f0f9ff,stroke:#bae6fd,stroke-dasharray: 5 5;
-                style Decoder fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5;
+        <div style="display:flex; justify-content:center; overflow-x:auto;">
+            <img src="cabac_arch_diagram.svg" alt="CABAC Encoder and Decoder Architecture" style="max-width: 100%; border-radius: 8px;">
         </div>
     </div>
 
@@ -814,8 +775,24 @@
 
         <h4 style="margin-top: 25px; color: #6d28d9;">第二步：丧心病狂的“五趟扫描” (5-Pass Coding)</h4>
         <p style="font-size: 0.9em; line-height: 1.6; color: #4c1d95;">
-            在扫描路线上，16 个系数并不是“读到一个就立刻把它编完”。相反，HEVC 会把这 16 个数据排成一列，然后<strong>对其进行 5 次独立检阅</strong>，每次只提取它们身上的一点特征！
+            在扫描路线上，16 个系数并不是“读到一个就立刻把它编完”。相反，HEVC 会把这 16 个数据排成一列，然后<strong>对其进行 5 次独立检阅</strong>，每次只提取它们身上的一点特征！你可以点击下方按钮亲自推演这个过程：
         </p>
+
+        <!-- Animation Block -->
+        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #c4b5fd; margin-bottom: 25px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h5 style="margin: 0; color: #5b21b6;">🎬 动画推演：一维系数数组的 5 趟狂奔</h5>
+                <button id="btnCoeffNext" style="background: #8b5cf6; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-family: Inter, sans-serif; transition: 0.2s;">开始第 1 趟扫描</button>
+            </div>
+            
+            <div>
+                <div style="font-size: 0.85em; color: #64748b; margin-bottom: 10px; font-weight: bold;" id="lblCoeffPass">当前状态：原始一维数组 (扫描前)</div>
+                <div style="font-size: 0.85em; color: #8b5cf6; margin-bottom: 15px; min-height: 20px;" id="lblCoeffDesc">包含 7 个从高频到低频扫描出来的系数样本</div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;" id="coeffArrayContainer">
+                    <!-- JS generated -->
+                </div>
+            </div>
+        </div>
 
         <ul style="font-size: 0.9em; line-height: 1.8; color: #4c1d95; background: #fff; padding: 20px 40px; border-radius: 8px; border: 1px solid #e2e8f0;">
             <li><strong>第 1 趟 (Pass 1)</strong>：只看 <code>sig_coeff_flag</code>。依次问扫描线上的系数：“你是 0 还是非 0？”。此时高度依赖精细的上下文模型。</li>
@@ -919,6 +896,110 @@
         if(tocList.firstChild) tocList.firstChild.querySelector('a').classList.add('active');
         if(topNav && topNav.firstChild) topNav.firstChild.classList.add('active');
     });
+
+    // 第 7 节：残差 5 趟扫描动画逻辑
+    const coeffData = [0, 0, 1, 1, -2, 4, 15];
+    const coeffContainer = document.getElementById('coeffArrayContainer');
+    const btnCoeff = document.getElementById('btnCoeffNext');
+    const lblPass = document.getElementById('lblCoeffPass');
+    const lblDesc = document.getElementById('lblCoeffDesc');
+    
+    let passState = 0;
+    
+    function renderCoeffs(highlightIndices, highlightColor, textFunc) {
+        coeffContainer.innerHTML = '';
+        coeffData.forEach((val, i) => {
+            const isHigh = highlightIndices.includes(i);
+            const div = document.createElement('div');
+            div.style.width = '45px';
+            div.style.height = '60px';
+            div.style.border = isHigh ? `2px solid ${highlightColor}` : '1px solid #cbd5e1';
+            div.style.borderRadius = '6px';
+            div.style.display = 'flex';
+            div.style.flexDirection = 'column';
+            div.style.alignItems = 'center';
+            div.style.justifyContent = 'center';
+            div.style.background = isHigh ? `${highlightColor}15` : '#f8fafc';
+            div.style.transition = 'all 0.3s ease';
+            div.style.transform = isHigh ? 'scale(1.05)' : 'scale(1)';
+            
+            const vSpan = document.createElement('span');
+            vSpan.style.fontWeight = 'bold';
+            vSpan.style.color = '#1e293b';
+            vSpan.style.fontSize = '1.1em';
+            vSpan.innerText = val;
+            
+            const bSpan = document.createElement('span');
+            bSpan.style.fontSize = '0.75em';
+            bSpan.style.fontWeight = 'bold';
+            bSpan.style.marginTop = '4px';
+            bSpan.style.color = isHigh ? highlightColor : '#94a3b8';
+            bSpan.innerText = textFunc ? textFunc(val, i, isHigh) : '';
+            
+            div.appendChild(vSpan);
+            div.appendChild(bSpan);
+            coeffContainer.appendChild(div);
+        });
+    }
+    
+    // Init
+    if(coeffContainer) {
+        renderCoeffs([], '', () => '');
+        
+        btnCoeff.addEventListener('click', () => {
+            passState++;
+            if (passState === 1) {
+                lblPass.innerText = "第 1 趟：sig_coeff_flag (询问：你是 0 吗？)";
+                lblDesc.innerText = "动作：编码所有的 0 和 1 (提取出非0标志)。高度依赖 Context 上下文模型！";
+                renderCoeffs([0,1,2,3,4,5,6], '#059669', (v) => v !== 0 ? 'sig=1' : 'sig=0');
+                btnCoeff.innerText = "下一趟：gt1_flag";
+                btnCoeff.style.background = '#2563eb';
+            } else if (passState === 2) {
+                lblPass.innerText = "第 2 趟：gt1_flag (询问：绝对值是否 > 1？)";
+                lblDesc.innerText = "动作：只对非0的系数开火，提取 >1 的标志。依然查 Context 表！";
+                renderCoeffs([2,3,4,5,6], '#2563eb', (v, i, h) => {
+                    if(!h) return '';
+                    return Math.abs(v) > 1 ? 'gt1=1' : 'gt1=0';
+                });
+                btnCoeff.innerText = "下一趟：gt2_flag";
+                btnCoeff.style.background = '#9333ea';
+            } else if (passState === 3) {
+                lblPass.innerText = "第 3 趟：gt2_flag (询问：绝对值是否 > 2？)";
+                lblDesc.innerText = "动作：只对绝对值>1的系数开火，提取 >2 的标志。最后一次查 Context 表！";
+                renderCoeffs([4,5,6], '#9333ea', (v, i, h) => {
+                    if(!h) return '';
+                    return Math.abs(v) > 2 ? 'gt2=1' : 'gt2=0';
+                });
+                btnCoeff.innerText = "下一趟：sign_flag";
+                btnCoeff.style.background = '#ea580c';
+            } else if (passState === 4) {
+                lblPass.innerText = "第 4 趟：sign_flag (提取正负号)";
+                lblDesc.innerText = "动作：提取所有非0系数的符号 (+ 或 -)。无脑纯旁路 (Bypass) 模式，速度极快！";
+                renderCoeffs([2,3,4,5,6], '#ea580c', (v, i, h) => {
+                    if(!h) return '';
+                    return v > 0 ? 'sign=+' : 'sign=-';
+                });
+                btnCoeff.innerText = "最后一趟：Remaining";
+                btnCoeff.style.background = '#e11d48';
+            } else if (passState === 5) {
+                lblPass.innerText = "第 5 趟：coeff_abs_level_remaining (编码剩余巨大数值)";
+                lblDesc.innerText = "动作：用截断莱斯(TR)和指数哥伦布编码剩下的巨型数值。纯旁路 (Bypass) 模式，硬件起飞！";
+                renderCoeffs([5,6], '#e11d48', (v, i, h) => {
+                    if(!h) return '';
+                    return `rem=${Math.abs(v)-3}`;
+                });
+                btnCoeff.innerText = "重新演示扫描";
+                btnCoeff.style.background = '#475569';
+            } else {
+                passState = 0;
+                lblPass.innerText = "当前状态：原始一维数组 (扫描前)";
+                lblDesc.innerText = "包含 7 个从高频到低频扫描出来的系数样本";
+                renderCoeffs([], '', () => '');
+                btnCoeff.innerText = "开始第 1 趟扫描";
+                btnCoeff.style.background = '#8b5cf6';
+            }
+        });
+    }
 </script>
 </body>
 </html>
