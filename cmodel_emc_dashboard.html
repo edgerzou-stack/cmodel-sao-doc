@@ -433,51 +433,51 @@
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding: 15px; font-weight: bold; color: #0f172a;">split_cu_flag</td>
                     <td style="padding: 15px; color: #475569;">当前 CU 是否继续四叉树划分</td>
-                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px;"><a href="#bina-fl" style="color: #3b82f6; text-decoration: none; font-weight: bold; border-bottom: 1px dashed #3b82f6;">固定长度 (FL)</a></td>
                     <td style="padding: 15px; font-size: 0.9em; color: #64748b;">当前块深度 (Depth) 以及上方、左侧块的划分状态</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #e2e8f0; background: #fdfdfd;">
                     <td style="padding: 15px; font-weight: bold; color: #0f172a;">cu_skip_flag</td>
                     <td style="padding: 15px; color: #475569;">是否为 Skip 模式 (无残差、共享MV)</td>
-                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px;"><a href="#bina-fl" style="color: #3b82f6; text-decoration: none; font-weight: bold; border-bottom: 1px dashed #3b82f6;">固定长度 (FL)</a></td>
                     <td style="padding: 15px; font-size: 0.9em; color: #64748b;">相邻块的 Skip 状态</td>
                 </tr>
                 <!-- PU 层 -->
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding: 15px; font-weight: bold; color: #0f172a;">pred_mode_flag</td>
                     <td style="padding: 15px; color: #475569;">预测模式：帧内 (Intra) 还是 帧间 (Inter)</td>
-                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px;"><a href="#bina-fl" style="color: #3b82f6; text-decoration: none; font-weight: bold; border-bottom: 1px dashed #3b82f6;">固定长度 (FL)</a></td>
                     <td style="padding: 15px; font-size: 0.9em; color: #64748b;">固定上下文 (通常不依赖周边)</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #e2e8f0; background: #fdfdfd;">
                     <td style="padding: 15px; font-weight: bold; color: #0f172a;">part_mode</td>
                     <td style="padding: 15px; color: #475569;">PU 划分模式 (2Nx2N, 2NxN, Nx2N 等)</td>
-                    <td style="padding: 15px; color: #0284c7;">一元码 (Unary) 等</td>
+                    <td style="padding: 15px;"><a href="#bina-tu" style="color: #10b981; text-decoration: none; font-weight: bold; border-bottom: 1px dashed #10b981;">一元码 (Unary) 等</a></td>
                     <td style="padding: 15px; font-size: 0.9em; color: #64748b;">当前 CU 的尺寸大小</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding: 15px; font-weight: bold; color: #0f172a;">mvd</td>
                     <td style="padding: 15px; color: #475569;">运动矢量差分 (绝对值和符号)</td>
-                    <td style="padding: 15px; color: #d97706;">k阶指数哥伦布 (EGk)</td>
+                    <td style="padding: 15px;"><a href="#bina-egk" style="color: #db2777; text-decoration: none; font-weight: bold; border-bottom: 1px dashed #db2777;">k阶指数哥伦布 (EGk)</a></td>
                     <td style="padding: 15px; font-size: 0.9em; color: #64748b;">首部 Bin 用上下文，后续巨大的数值部分走 Bypass 模式直接编码</td>
                 </tr>
                 <!-- TU 层 -->
                 <tr style="border-bottom: 1px solid #e2e8f0; background: #fdfdfd;">
                     <td style="padding: 15px; font-weight: bold; color: #0f172a;">rq_root_cbf</td>
                     <td style="padding: 15px; color: #475569;">当前块是否存在任何非零残差</td>
-                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px;"><a href="#bina-fl" style="color: #3b82f6; text-decoration: none; font-weight: bold; border-bottom: 1px dashed #3b82f6;">固定长度 (FL)</a></td>
                     <td style="padding: 15px; font-size: 0.9em; color: #64748b;">无特殊空间依赖</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding: 15px; font-weight: bold; color: #0f172a;">sig_coeff_flag</td>
                     <td style="padding: 15px; color: #475569;">该坐标上的量化系数是否为非零</td>
-                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px;"><a href="#bina-fl" style="color: #3b82f6; text-decoration: none; font-weight: bold; border-bottom: 1px dashed #3b82f6;">固定长度 (FL)</a></td>
                     <td style="padding: 15px; font-size: 0.9em; color: #b91c1c;"><strong>极度复杂</strong>：依赖周边系数能量、所在的对角线位置等</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #e2e8f0; background: #fdfdfd;">
                     <td style="padding: 15px; font-weight: bold; color: #0f172a;">coeff_abs_level_remaining</td>
                     <td style="padding: 15px; color: #475569;">系数绝对值的剩余巨大数值</td>
-                    <td style="padding: 15px; color: #c026d3;">截断莱斯 (TR) + EGk</td>
+                    <td style="padding: 15px;"><a href="#bina-tr" style="color: #f59e0b; text-decoration: none; font-weight: bold; border-bottom: 1px dashed #f59e0b;">截断莱斯 (TR) + EGk</a></td>
                     <td style="padding: 15px; font-size: 0.9em; color: #64748b;">全部走 Bypass 模式 (旁路模式，为了硬件高吞吐)</td>
                 </tr>
             </tbody>
@@ -491,9 +491,9 @@
         实际上，HEVC 算术解码器在吃进 0 和 1 时，心里背着 4 本不同的“字典”。针对不同的语法元素，它会掏出不同的字典去“查单词”。这 4 本字典就是 HEVC 最核心的四大二值化兵法：
     </p>
 
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 30px;">
         <!-- FL -->
-        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+        <div id="bina-fl" style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
             <h4 style="margin-top: 0; color: #1e3a8a;">1. 定长码 (Fixed Length, FL)</h4>
             <p style="font-size: 0.85em; color: #475569;">
                 <strong>匹配规则：</strong>傻瓜式计数。<br>
@@ -503,7 +503,7 @@
         </div>
 
         <!-- TU -->
-        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #10b981; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+        <div id="bina-tu" style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #10b981; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
             <h4 style="margin-top: 0; color: #064e3b;">2. 截断一元码 (Truncated Unary, TU)</h4>
             <p style="font-size: 0.85em; color: #475569;">
                 <strong>匹配规则：</strong>遇到 0 刹车，或触发上限报警。<br>
@@ -514,7 +514,7 @@
         </div>
 
         <!-- EGk -->
-        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #db2777; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+        <div id="bina-egk" style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #db2777; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
             <h4 style="margin-top: 0; color: #831843;">3. 指数哥伦布 (Exp-Golomb, EGk)</h4>
             <p style="font-size: 0.85em; color: #475569;">
                 <strong>匹配规则：</strong>数 1 决定后缀长度。<br>
@@ -526,7 +526,7 @@
         </div>
 
         <!-- TR -->
-        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #f59e0b; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+        <div id="bina-tr" style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #f59e0b; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
             <h4 style="margin-top: 0; color: #78350f;">4. 截断莱斯 (Truncated Rice, TR)</h4>
             <p style="font-size: 0.85em; color: #475569;">
                 <strong>匹配规则：</strong>TU 和 FL 的完美缝合怪。<br>
@@ -820,6 +820,7 @@
                 因为前 3 趟 (是否为0，是否>1) 规律极强，非常适合算术引擎利用 <strong>上下文模型 (Context)</strong> 极限压缩。而符号(正负)和剩余大数(Remaining)毫无规律，如果跟前面混在一起算，会严重拖慢硬件算盘的速度。把它剥离出来放在最后 2 趟全部走 Bypass (不查表、不更新概率)，能让硬件吞吐率飙升！这就是算法为硬件让路、实现极致性能的体现。
             </p>
         </div>
+    </div>
         
 <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">4. 深度解密：没有分隔符的比特流，解码端凭什么能看懂？</h2>
     <h3>4.1 宏观领航：FSM 状态机与协议默契</h3>
