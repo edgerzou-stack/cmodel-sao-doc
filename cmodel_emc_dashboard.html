@@ -679,6 +679,46 @@
         </table>
     </div>
 
+    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: #ef4444;">5. 终极拷问：比特流里没有分隔符，解码器怎么认识谁是谁？</h2>
+    <p style="font-size: 0.95em; color: #475569;">这是 CABAC 学习者最常问、也是直觉上最反常识的问题：<br>
+    既然 <code>Range</code> 和 <code>Low</code> 是一直连续算下去的，最后输出的 <code>.265</code> 码流只是一个纯粹的 <code>0101100...</code> 序列，<strong>里面没有任何类似 <code>\n</code> 或 <code>,</code> 的物理分隔符</strong>，那么解码器凭什么知道前 3 个 bit 是 MVD，后 1 个 bit 是 Skip Flag？</p>
+
+    <div style="background: #fff5f5; border: 1px solid #fecaca; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+        <h4 style="margin-top: 0; color: #b91c1c;">核心答案：严格同步的“幽灵状态机” (Synchronized FSM)</h4>
+        <p style="font-size: 0.9em; line-height: 1.6; color: #7f1d1d;">
+            CABAC 之所以能不要分隔符，是因为<strong>编码器和解码器的大脑里，刻着一张绝对一模一样的“语法解析路线图 (状态机)”</strong>。它们不是通过“找分隔符”来断句的，而是通过“预言逻辑”来断句的！
+        </p>
+
+        <div class="mermaid" style="display:flex; justify-content:center; overflow-x:auto; margin-top: 15px;">
+            %%{init: {'theme': 'base', 'themeVariables': { 'primaryTextColor': '#1e293b', 'fontFamily': 'Inter, sans-serif' }}}%%
+            sequenceDiagram
+                participant E as 编码器状态机
+                participant S as 物理比特流 (无分隔符)
+                participant D as 解码器状态机
+                
+                Note over E,D: 阶段 1：解析 split_cu_flag
+                E->>E: 当前刚进入一个 CU<br>规定必须先处理 split_cu_flag
+                E->>S: 吐出对应的 Bit(s)
+                D->>D: 我知道现在刚进入 CU<br>第一个数据必定是 split_cu_flag
+                S-->>D: 读取比特，解码出对应的 Bin
+                
+                Note over E,D: 阶段 2：根据前一个状态产生逻辑分支
+                E->>E: 因为 split_cu_flag = 0 (不划分)<br>按协议，下一步必定是 cu_skip_flag
+                E->>S: 吐出 cu_skip_flag 对应的 Bit(s)
+                D->>D: 啊哈！刚才读到的 split=0<br>所以我知道下一个要吃的是 cu_skip_flag
+                S-->>D: 继续读取后面的比特，解码出 Bin
+        </div>
+        
+        <p style="font-size: 0.9em; line-height: 1.6; color: #7f1d1d; margin-top: 15px;">
+            <strong>解码器的视角是这样的：</strong><br>
+            1. 我现在站在 CU 的开头。HEVC 标准协议规定，第一口必须要吃 <code>split_cu_flag</code>。<br>
+            2. 我去向底层算术引擎要 Bin。引擎从连续的 <code>01011...</code> 物理码流中解出一个 Bin 交给我。<br>
+            3. 我一看，<code>split_cu_flag = 0</code>。根据协议，如果不划分，下一步必须查 <code>cu_skip_flag</code>。<br>
+            4. 于是我再次向算术引擎索要下一个 Bin...<br><br>
+            <strong>总结：</strong>比特流之所以不需要物理分隔符，是因为<strong>语法元素之间的严密逻辑顺序，构成了天然的“隐形分隔符”</strong>。这就像两个人背同一首诗，不需要标点符号，只要听前面的字，就知道当前念到了哪一句。这也意味着，一旦码流中间错了一个 bit（例如把不划分解码成了划分），导致解码器状态机走错分叉，后续整个 Slice 的所有推演全都会彻底崩溃，这就是 CABAC 对网络丢包和误码极其敏感的核心原因。
+        </p>
+    </div>
+
 </div>
 </div>
 
