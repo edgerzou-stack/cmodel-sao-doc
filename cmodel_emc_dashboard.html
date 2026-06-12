@@ -61,11 +61,7 @@
     <h1>HEVC EMC (Entropy Multi-Context) 硬件架构级解析<br><span style="font-size:0.55em; color:#94a3b8; font-weight:400; letter-spacing: 3px;">CABAC 引擎与树形状态机底层揭秘</span></h1>
 
     
-    <div style="background: linear-gradient(135deg, #3b82f6 0%, #ffffff 100%); padding: 20px 30px; border-radius: 12px; margin-top: 50px; margin-bottom: 30px; border-left: 8px solid #3b82f6; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-        <h1 style="margin: 0; color: #1e293b; font-size: 1.8em;">Part I: 宏观调度层 (System & Scheduling)</h1>
-        <p style="margin: 10px 0 0 0; color: #475569; font-size: 0.95em;">解析 EMC 模块的系统定位与底层架构，以及空间树形状态机的运转机制。</p>
-    </div>
-<h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">1. 宏观控制层：EMC 模块定位与异步 FIFO 架构</h2>
+    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">1. 宏观控制层：EMC 模块定位与异步 FIFO 架构</h2>
     <p>在 HEVC 的硬件流水线中，EMC（熵编码）模块位于全链路的最末端。它的核心职责是接收上游（如模式决策、变换量化、SAO等）产生的海量语法元素参数，并通过强大的 <strong>CABAC (Context-Adaptive Binary Arithmetic Coding)</strong> 引擎将它们极致压缩为最终的二进制码流 (Bitstream)。</p>
 
     <h3>1.1 为什么需要庞大的 FIFO 阵列？</h3>
@@ -418,12 +414,8 @@
     </div>
 
     
-    <div style="background: linear-gradient(135deg, #10b981 0%, #ffffff 100%); padding: 20px 30px; border-radius: 12px; margin-top: 50px; margin-bottom: 30px; border-left: 8px solid #10b981; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-        <h1 style="margin: 0; color: #1e293b; font-size: 1.8em;">Part II: 压缩引擎层 (CABAC Compression Engine)</h1>
-        <p style="margin: 10px 0 0 0; color: #475569; font-size: 0.95em;">深入 CABAC 的心脏：从 CU 语法元素字典的映射，到最终算术压缩挤出比特的完整流程。</p>
-    </div>
-<h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">3. 核心机制：CABAC 语法字典与全链路剖析</h2>
-<h3 style="margin-top: 30px; color: #0284c7; border-left: 4px solid #0284c7; padding-left: 10px;">3.1 字典与映射：CU 级语法元素速查表</h3>
+    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">3. 核心机制：CABAC 语法字典与全链路剖析</h2>
+<h3>3.1 字典与映射：CU 级语法元素速查表</h3>
     <p>CABAC 引擎每天都在疯狂地咀嚼各种“语法元素”。为了方便后续开发和 Debug，我为你整理了 HEVC 中最核心的 CU/PU/TU 级别语法元素及其对应的二值化武器和上下文依赖：</p>
 
     <div style="overflow-x: auto; margin-top: 20px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
@@ -492,7 +484,70 @@
         </table>
     </div>
 
-    <h3 style="margin-top: 40px; color: #0284c7; border-left: 4px solid #0284c7; padding-left: 10px;">3.2 算术编码架构：CABAC 的完整数据流向</h3>
+    <h3>3.2 底层兵法：HEVC 的四大核心二值化码表规则</h3>
+
+    <p style="font-size: 0.95em; color: #475569;">
+        你在上面那张“完美对称架构图”的第 4 步看到了一个判断条件：<strong>“符合码表规则，组合成功！”</strong>。到底什么是码表规则？<br>
+        实际上，HEVC 算术解码器在吃进 0 和 1 时，心里背着 4 本不同的“字典”。针对不同的语法元素，它会掏出不同的字典去“查单词”。这 4 本字典就是 HEVC 最核心的四大二值化兵法：
+    </p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
+        <!-- FL -->
+        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+            <h4 style="margin-top: 0; color: #1e3a8a;">1. 定长码 (Fixed Length, FL)</h4>
+            <p style="font-size: 0.85em; color: #475569;">
+                <strong>匹配规则：</strong>傻瓜式计数。<br>
+                解码器会提前知道这个语法元素需要几个 Bin（比如 <code>cMax = 3</code>）。它就向算术引擎要 3 个 Bin。要够了 3 个，直接判定“符合规则”，收工退出。<br>
+                <strong>适用对象：</strong>像 <code>pcm_sample_luma</code> 这种毫无压缩空间、完全随机的值。
+            </p>
+        </div>
+
+        <!-- TU -->
+        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #10b981; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+            <h4 style="margin-top: 0; color: #064e3b;">2. 截断一元码 (Truncated Unary, TU)</h4>
+            <p style="font-size: 0.85em; color: #475569;">
+                <strong>匹配规则：</strong>遇到 0 刹车，或触发上限报警。<br>
+                解码器不断读 Bin。只要读到 <code>1</code> 就继续。如果读到了 <code>0</code>，判定“符合规则”并停止。<br>
+                为了防止出现无限长的 1，它还设置了一个上限 <code>cMax</code>。如果连续读到的 1 达到了 <code>cMax</code>，即便没碰到 0，也会强行判定“符合规则”并停止！<br>
+                <strong>适用对象：</strong>小范围内的非负整数，如部分内部预测模式 <code>mpm_idx</code>。
+            </p>
+        </div>
+
+        <!-- EGk -->
+        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #db2777; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+            <h4 style="margin-top: 0; color: #831843;">3. 指数哥伦布 (Exp-Golomb, EGk)</h4>
+            <p style="font-size: 0.85em; color: #475569;">
+                <strong>匹配规则：</strong>数 1 决定后缀长度。<br>
+                先用类似一元码的方式死循环，不断数 <code>1</code> 的个数，直到遇见 <code>0</code> 刹车（这就是前缀）。<br>
+                一旦刹车，解码器会立刻算出公式：<code>后缀要读的 Bin 数量 = 前缀 1 的个数 + 阶数 k</code>。<br>
+                然后闭着眼睛再读这么多个固定长度的 Bin，读完拼在一起，判定“符合规则”！<br>
+                <strong>适用对象：</strong>数值可能极大，且概率呈指数衰减的残差绝对值（如 <code>abs_mvd_greater0_flag</code> 之后的数值）。
+            </p>
+        </div>
+
+        <!-- TR -->
+        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #f59e0b; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+            <h4 style="margin-top: 0; color: #78350f;">4. 截断莱斯 (Truncated Rice, TR)</h4>
+            <p style="font-size: 0.85em; color: #475569;">
+                <strong>匹配规则：</strong>TU 和 FL 的完美缝合怪。<br>
+                它的前缀是一个标准的一元码（遇到 0 刹车，或者达到上限 <code>cMax</code>）。<br>
+                前缀匹配成功后，它会紧接着再读一个定长（FL）的后缀。后缀的固定长度等于一个动态计算出来的参数 <code>cRiceParam</code>。<br>
+                前缀和后缀都读完，判定“符合规则”！<br>
+                <strong>适用对象：</strong>残差系数最后那丧心病狂的第 5 趟扫描（<code>coeff_abs_level_remaining</code> 的主力军）。
+            </p>
+        </div>
+    </div>
+    
+    <div style="background: #f8fafc; border-left: 4px solid #94a3b8; padding: 15px; border-radius: 4px; margin-bottom: 30px;">
+        <p style="font-size: 0.85em; margin: 0; color: #334155;">
+            <strong>终极真相：</strong><br>
+            所谓的“反二值化匹配器”，在 C-Model 的底层并没有一张真正的、动辄几百兆的庞大字典数组去遍历查询。<br>
+            它是通过<strong> <code>while(bin != 0)</code> 配合 <code>if (count == cMax)</code> 以及定长的 <code>for(i=0; i&lt;len; i++)</code></strong> 这三种极其精简、对底层硬件无比友好的基础 C 语言逻辑门电路，把整个“查表”过程<strong>动态推演</strong>出来的！这才是解码端 FSM “符合码表规则”最真实的实现原理。
+        </p>
+    </div>
+
+
+<h3>3.3 算术编码架构：CABAC 的完整数据流向</h3>
     <p>很多初学者在学习 CABAC 时，往往会把“语法元素”和“底层算术引擎”割裂开来。实际上，它们是一条流水线。<br>
     上一节的状态机产生了诸如 <code>MVD</code>、<code>Skip_flag</code> 等高层语法元素，这些元素必须经过<strong>二值化 (Binarizer)</strong> 变成纯粹的 0 和 1 (Bin)，才能送入底层的 <strong>算术引擎 (Arithmetic Engine)</strong> 进行压缩。</p>
 
@@ -525,7 +580,7 @@
     
 
     <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
-        <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">📖 一镜到底实战演练：编码 MVD_x = 1 的全生命周期</h4>
+        <h3>3.4 算术编码的微观推演 (MVD=1 示例)</h3>
         <p style="font-size: 0.95em; color: #475569;">假设上一节的状态机（PU_INFO 层级）算出了当前块的运动矢量差分 <code>MVD_x = 1</code>。我们来跟踪它如何被吃进比特流。</p>
 
         <div style="display: flex; gap: 20px; margin-top: 20px;">
@@ -556,14 +611,6 @@
                         2. <strong>Low (底线)</strong>：10-bit 寄存器，<strong>初始值为 0</strong>，代表当前编码状态在数轴上的物理起点。<br>
                         <em>注：为了方便心算推演，下方的模拟器采用了一个近似的整数 <code>Range = 500</code> 作为初始状态。</em>
                     </p>
-                    <hr style="border: none; border-top: 1px dashed #bae6fd; margin: 10px 0;">
-                    </p><h3 style="margin-top: 30px; margin-bottom: 15px; color: #0369a1; border-left: 4px solid #0369a1; padding-left: 10px;">3.4 乘法器的终结：Range 查表切分机制</h3>
-<p style="font-size: 0.85em; margin: 0; color: #0c4a6e; line-height: 1.5;">
-                        <strong>🔥 深入灵魂的拷问：Range 怎么按概率切分？需要算乘法吗？</strong><br>
-                        你可能会想：切分区间不就是 <code>R_LPS = Range × P_LPS</code> 吗？在芯片里算乘法可是非常昂贵且缓慢的！<br>
-                        HEVC/H.264 的 CABAC 最伟大的发明之一就是<strong>“无乘法区间划分” (Multiplication-free)</strong>。它直接用查表 (LUT) 替代了乘法：<br>
-                        因为归一化机制的存在，<code>Range</code> 永远被卡在 <strong>[256, 510]</strong> 之间（最高位恒定为 1）。引擎只需提取 Range 的第 6、7 位作为“区间近似索引 (0~3)”，再结合当前上下文的“概率状态索引 pStateIdx (0~63)”，去查一张硬编码的 <strong>64x4 二维常量数组 (RangeTabLps)</strong>。<br>
-                        一瞬间，查表得出 <code>R_LPS</code>。然后加法器一跑：<code>R_MPS = Range - R_LPS</code>。整个切分过程 0 乘法、纯组合逻辑，这也是 CABAC 算盘能跑出超高吞吐率的底层根基！
                     </p>
                 </div>
                 <p style="font-size: 0.9em; line-height: 1.4; color: #475569;">现在，我们把这串 Bins 里的第一个 <code>1</code> (假设这是小概率事件 LPS) 喂进底层的算术引擎。你可以手动点击按钮一步步推演底层运算过程，或者直接点击“自动推演”：</p>
@@ -692,7 +739,7 @@
     </script>
 
     
-    <h3 style="margin-top: 40px; color: #8b5cf6; border-left: 4px solid #8b5cf6; padding-left: 10px;">3.5 压轴实战：16 个残差系数 (Coeff) 的“五趟扫描”</h3>
+    <h3>3.6 压轴实战：16 个残差系数 (Coeff) 的“五趟扫描”</h3>
 
     <p style="font-size: 0.95em; color: #475569;">当你看到上面的 <code>coeff_abs_level_remaining</code> 时，你猜测“是不是把 16 个像素值直接位拼接起来？”<br>
     <strong>答案是：绝对不是！</strong> 视频压缩中最占体积的就是残差系数 (Coeff)，如果直接拼接，压缩率会奇差无比。HEVC 对系数的编码有着极度精妙的<strong>“多趟扫描 (Multi-pass Scanning)”</strong>机制。</p>
@@ -774,12 +821,8 @@
             </p>
         </div>
         
-<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ffffff 100%); padding: 20px 30px; border-radius: 12px; margin-top: 50px; margin-bottom: 30px; border-left: 8px solid #8b5cf6; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-        <h1 style="margin: 0; color: #1e293b; font-size: 1.8em;">Part III: 黑科技解密与大一统架构 (Bitstream Decryption & Unified Architecture)</h1>
-        <p style="margin: 10px 0 0 0; color: #475569; font-size: 0.95em;">揭秘 HEVC 最神奇的无分隔符解码技术，以及编解码架构的对称之美。</p>
-    </div>
 <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">4. 深度解密：没有分隔符的比特流，解码端凭什么能看懂？</h2>
-    <h3 style="margin-top: 30px; color: #4c1d95; border-left: 4px solid #4c1d95; padding-left: 10px;">4.1 宏观领航：FSM 状态机与协议默契</h3>
+    <h3>4.1 宏观领航：FSM 状态机与协议默契</h3>
     <p style="font-size: 0.95em; color: #475569;">这是 CABAC 学习者最常问、也是直觉上最反常识的问题：<br>
     既然 <code>Range</code> 和 <code>Low</code> 是一直连续算下去的，最后输出的 <code>.265</code> 码流只是一个纯粹的 <code>0101100...</code> 序列，<strong>里面没有任何类似 <code>\n</code> 或 <code>,</code> 的物理分隔符</strong>，那么解码器凭什么知道前 3 个 bit 是 MVD，后 1 个 bit 是 Skip Flag？</p>
 
@@ -820,7 +863,7 @@
     </div>
 
     
-<h3 style="margin-top: 40px; color: #db2777; border-left: 4px solid #db2777; padding-left: 10px;">4.2 微观刹车：自终止的前缀码机制</h3>
+<h3>4.2 微观刹车：自终止的前缀码机制</h3>
     <p style="font-size: 0.95em; color: #475569;">
         你可能会问：既然码流里没有分隔符，那比如在解 <code>coeff_abs_level_remaining</code> 时，解码器怎么知道当前解出的这几个 Bin 已经凑成了一个完整的元素，可以停下来进入下一个状态了？<br>
         <strong>答案是：二值化算法（如指数哥伦布、截断莱斯）本身自带“自终止 (Self-terminating)”属性！</strong>
@@ -854,68 +897,7 @@
             <strong>总结：</strong>反二值化器就像一个精密的齿轮。如果是定长编码 (FL)，它就死读固定的 N 个 Bin；如果是变长编码 (如 EGk 或 TR)，它就利用 <code>0</code> 作为刹车片，刹车后再根据数学公式滑行固定的距离。<strong>一切都在预先定义好的协议的掌控之中，一个 Bin 都不会多，也不会少。</strong>
         </p>
         
-<h3 style="margin-top: 40px; color: #b45309; border-left: 4px solid #b45309; padding-left: 10px;">4.3 底层兵法：HEVC 的四大核心二值化码表规则</h3>
-    <p style="font-size: 0.95em; color: #475569;">
-        你在上面那张“完美对称架构图”的第 4 步看到了一个判断条件：<strong>“符合码表规则，组合成功！”</strong>。到底什么是码表规则？<br>
-        实际上，HEVC 算术解码器在吃进 0 和 1 时，心里背着 4 本不同的“字典”。针对不同的语法元素，它会掏出不同的字典去“查单词”。这 4 本字典就是 HEVC 最核心的四大二值化兵法：
-    </p>
-
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
-        <!-- FL -->
-        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-            <h4 style="margin-top: 0; color: #1e3a8a;">1. 定长码 (Fixed Length, FL)</h4>
-            <p style="font-size: 0.85em; color: #475569;">
-                <strong>匹配规则：</strong>傻瓜式计数。<br>
-                解码器会提前知道这个语法元素需要几个 Bin（比如 <code>cMax = 3</code>）。它就向算术引擎要 3 个 Bin。要够了 3 个，直接判定“符合规则”，收工退出。<br>
-                <strong>适用对象：</strong>像 <code>pcm_sample_luma</code> 这种毫无压缩空间、完全随机的值。
-            </p>
-        </div>
-
-        <!-- TU -->
-        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #10b981; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-            <h4 style="margin-top: 0; color: #064e3b;">2. 截断一元码 (Truncated Unary, TU)</h4>
-            <p style="font-size: 0.85em; color: #475569;">
-                <strong>匹配规则：</strong>遇到 0 刹车，或触发上限报警。<br>
-                解码器不断读 Bin。只要读到 <code>1</code> 就继续。如果读到了 <code>0</code>，判定“符合规则”并停止。<br>
-                为了防止出现无限长的 1，它还设置了一个上限 <code>cMax</code>。如果连续读到的 1 达到了 <code>cMax</code>，即便没碰到 0，也会强行判定“符合规则”并停止！<br>
-                <strong>适用对象：</strong>小范围内的非负整数，如部分内部预测模式 <code>mpm_idx</code>。
-            </p>
-        </div>
-
-        <!-- EGk -->
-        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #db2777; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-            <h4 style="margin-top: 0; color: #831843;">3. 指数哥伦布 (Exp-Golomb, EGk)</h4>
-            <p style="font-size: 0.85em; color: #475569;">
-                <strong>匹配规则：</strong>数 1 决定后缀长度。<br>
-                先用类似一元码的方式死循环，不断数 <code>1</code> 的个数，直到遇见 <code>0</code> 刹车（这就是前缀）。<br>
-                一旦刹车，解码器会立刻算出公式：<code>后缀要读的 Bin 数量 = 前缀 1 的个数 + 阶数 k</code>。<br>
-                然后闭着眼睛再读这么多个固定长度的 Bin，读完拼在一起，判定“符合规则”！<br>
-                <strong>适用对象：</strong>数值可能极大，且概率呈指数衰减的残差绝对值（如 <code>abs_mvd_greater0_flag</code> 之后的数值）。
-            </p>
-        </div>
-
-        <!-- TR -->
-        <div style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; border-top: 4px solid #f59e0b; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-            <h4 style="margin-top: 0; color: #78350f;">4. 截断莱斯 (Truncated Rice, TR)</h4>
-            <p style="font-size: 0.85em; color: #475569;">
-                <strong>匹配规则：</strong>TU 和 FL 的完美缝合怪。<br>
-                它的前缀是一个标准的一元码（遇到 0 刹车，或者达到上限 <code>cMax</code>）。<br>
-                前缀匹配成功后，它会紧接着再读一个定长（FL）的后缀。后缀的固定长度等于一个动态计算出来的参数 <code>cRiceParam</code>。<br>
-                前缀和后缀都读完，判定“符合规则”！<br>
-                <strong>适用对象：</strong>残差系数最后那丧心病狂的第 5 趟扫描（<code>coeff_abs_level_remaining</code> 的主力军）。
-            </p>
-        </div>
-    </div>
-    
-    <div style="background: #f8fafc; border-left: 4px solid #94a3b8; padding: 15px; border-radius: 4px; margin-bottom: 30px;">
-        <p style="font-size: 0.85em; margin: 0; color: #334155;">
-            <strong>终极真相：</strong><br>
-            所谓的“反二值化匹配器”，在 C-Model 的底层并没有一张真正的、动辄几百兆的庞大字典数组去遍历查询。<br>
-            它是通过<strong> <code>while(bin != 0)</code> 配合 <code>if (count == cMax)</code> 以及定长的 <code>for(i=0; i&lt;len; i++)</code></strong> 这三种极其精简、对底层硬件无比友好的基础 C 语言逻辑门电路，把整个“查表”过程<strong>动态推演</strong>出来的！这才是解码端 FSM “符合码表规则”最真实的实现原理。
-        </p>
-    </div>
-
-<h3 style="margin-top: 40px; color: var(--primary); border-left: 4px solid var(--primary); padding-left: 10px;">4.4 架构大一统：编解码的完美对称之美</h3>
+<h3>4.3 架构大一统：编解码的完美对称之美</h3>
 
     <p style="font-size: 0.95em; color: #475569;">为了让你对“语法元素是如何变成码流，又如何从码流中复活”有一个全局的体感，我为你绘制了最后这张 <strong>CABAC 编解码对称架构图</strong>。你可以清晰地看到，解码器在做的所有事情，就是把编码器走过的路，原封不动地倒着走一遍：</p>
 
