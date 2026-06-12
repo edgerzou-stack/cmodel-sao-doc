@@ -502,6 +502,15 @@
             <!-- 后半段：算术编码推演 -->
             <div style="flex: 1.5; background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px; display: flex; flex-direction: column;">
                 <h5 style="margin-top: 0; color: #0f172a;">第二步：Bins -> Bitstream (算术压缩)</h5>
+                <div style="background: #e0f2fe; padding: 12px; border-radius: 6px; border-left: 4px solid #0284c7; margin-bottom: 15px;">
+                    <p style="font-size: 0.85em; margin: 0; color: #0369a1; line-height: 1.5;">
+                        <strong>💡 硬件小科普：Range 是怎么确定的？</strong><br>
+                        在真实的 HEVC 硬件中，算术引擎包含两个核心寄存器：<br>
+                        1. <strong>Range (区间)</strong>：9-bit 寄存器，在每个 Slice 开始时会<strong>固定初始化为 510</strong> (0x01FE)，它代表当前可用的概率空间总长度。每次编码都会把这个长度按概率切小。<br>
+                        2. <strong>Low (底线)</strong>：10-bit 寄存器，<strong>初始值为 0</strong>，代表当前编码状态在数轴上的物理起点。<br>
+                        <em>注：为了方便心算推演，下方的模拟器采用了一个近似的整数 <code>Range = 500</code> 作为初始状态。</em>
+                    </p>
+                </div>
                 <p style="font-size: 0.9em; line-height: 1.4; color: #475569;">现在，我们把这串 Bins 里的第一个 <code>1</code> (假设这是小概率事件 LPS) 喂进底层的算术引擎。你可以点击下方按钮，亲自执行这个底层运算过程：</p>
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
