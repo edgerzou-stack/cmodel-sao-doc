@@ -104,15 +104,37 @@
         如果该 index 命中了 RDO 选出的起步 `subTypeIdx` 后连续 4 个带中的一个，就会将对应的 <code>offset[i]</code> 加到像素上。
     </div>
 
-    <h3>2.2 偏移量 (Offset) 计算策略</h3>
-    <p>偏移量的计算不是简单求均值，而是通过 <code>estIterOffset</code> 结合率失真代价进行迭代寻优的：</p>
+    <h3>2.2 偏移量 (Offset) 精确计算公式与举例</h3>
+    <p>偏移量的确定分为“计算初始预估值”和“迭代寻优”两步 (参考源码 <code>estIterOffset</code>)：</p>
     <ul>
-        <li><strong>初始统计</strong>：遍历 CTU，累加当前频带下原始像素与重建像素的差值和 <code>offsetOrg = &sum;(Org - Rec)</code>，以及属于该频带的像素个数 <code>count</code>。</li>
-        <li><strong>迭代搜索</strong>：令候选偏移量 <code>offset</code> 从初始均值开始，逐步向 0 递减。</li>
-        <li><strong>失真计算公式</strong>：C-Model 中的 <code>estSaoDist</code> 公式为：<br>
-        <code>&Delta;Distortion = (count * offset * offset - offsetOrg * offset * 2) >> shift</code><br>
-        <em>(这是通过展开平方差公式化简得到的相对失真变化量)</em></li>
+        <li><strong>步骤一：估算均值 (硬件友好的除法近似)</strong><br>
+            收集该类别内所有原始像素与重建像素的误差和 <code>offsetOrg = &sum;(Org - Rec)</code>，以及像素个数 <code>count</code>。<br>
+            理想偏移应当是平均误差 <code>offsetOrg / count</code>，但在 C-Model 中为了避免除法：<br>
+            令 <code>c = floor(log2(count))</code>，初始预估值 <code>init_guess = offsetOrg >> c</code>。<br>
+            最后将 <code>init_guess</code> 截断至合法范围（例如 8-bit 下通常为 <code>[-7, 7]</code>）。
+        </li>
+        <li><strong>步骤二：率失真迭代寻优</strong><br>
+            候选 <code>offset</code> 从 <code>init_guess</code> 开始向 0 递减尝试。对于每个 <code>offset</code>：<br>
+            相对失真 <code>&Delta;Dist = (count * offset * offset - offsetOrg * offset * 2) >> shift</code><br>
+            预估码率 <code>Rate = ABS(offset) + 常数</code><br>
+            计算 <code>Cost = &Delta;Dist + &lambda; * Rate</code>，选取 Cost 最小的 <code>offset</code> 作为最终输出。
+        </li>
     </ul>
+
+    <div class="highlight" style="background-color: #fff8e1; border-color: #ffb300;">
+        <strong>📝 详细举例计算：</strong><br>
+        假设在一个 CTU 中，某个 BO Band 内有 <strong>8</strong> 个像素 (<code>count = 8</code>)。<br>
+        它们经过 Deblock 后的 (原始值 - 重建值) 误差分别为：<code>+4, +5, +3, +4, +5, +3, +4, +4</code>。<br>
+        <ul>
+            <li><code>offsetOrg</code> = 32。</li>
+            <li><code>c = floor(log2(8)) = 3</code>。</li>
+            <li><code>init_guess = 32 >> 3 = 4</code>。所以从 4 开始试探。</li>
+        </ul>
+        假设进入迭代寻优：<br>
+        尝试 <strong>offset = 4</strong>：<code>&Delta;Dist = 8 * 4&sup2; - 32 * 4 * 2 = 128 - 256 = -128</code>。需要传输的码率 <code>Rate &asymp; 4</code> 位，<code>Cost&harr;4 = -128 + 4 * &lambda;</code>。<br>
+        尝试 <strong>offset = 3</strong>：<code>&Delta;Dist = 8 * 3&sup2; - 32 * 3 * 2 = 72 - 192 = -120</code>。需要传输的码率 <code>Rate &asymp; 3</code> 位，<code>Cost&harr;3 = -120 + 3 * &lambda;</code>。<br>
+        如果 <code>&lambda;</code> 较小（即看重画质），算法会最终确定偏移量为 <strong>4</strong>；如果 <code>&lambda;</code> 很大（码率吃紧，大于 8），则可能退化选择 <strong>3</strong>，以此类推。
+    </div>
 
     <h2>3. Edge Offset (EO - 边缘偏移) 模式</h2>
     <p>EO 模式利用像素间的局部空间梯度，比较当前像素与其邻居的大小关系，根据分类 (Class) 来补偿。</p>
@@ -156,15 +178,16 @@
     </div>
     
     <div class="highlight">
-        <strong>💡 设计约束：</strong><br>
-        Class 1 和 2 只能使用正偏移 (提亮谷底)，Class 3 和 4 只能使用负偏移 (压暗山顶)。这在 C-Model 的码流解析 (<code>codeSaoOffset</code>) 和推导逻辑中是严格约束的。
+        <strong>💡 设计约束 (强制置零)：</strong><br>
+        C-Model 中存在一段强硬判定：Class 1 和 2 只能使用正偏移 (提亮谷底)，Class 3 和 4 只能使用负偏移 (压暗山顶)。<br>
+        在计算出初始预估偏移量 <code>init_guess</code> 后，如果 Class 1/2 算出了负值，或者 Class 3/4 算出了正值，则 <strong>直接将 offset 强制归 0</strong>。这极大降低了传错方向参数的概率，也省去了符号位的编码。
     </div>
 
-    <h3>3.3 EO 偏移量计算与抉择</h3>
-    <p>与 BO 类似，EO 的偏移量计算同样统计各类别的 <code>offsetOrg</code> 和 <code>count</code>。但在 C-Model 代码中，EO 受到严格的符号约束：</p>
+    <h3>3.3 EO 偏移量抉择特征</h3>
+    <p>与 BO 的计算流程完全一致，EO 也是先求出 <code>offsetOrg >> c</code> 的预估值再迭代。但在 C-Model 代码中，EO 受到严格的符号约束：</p>
     <ul>
-        <li>在 <code>estIterOffset</code> 寻优时，若为 Class 1/2，候选 <code>offset</code> 强制非负；若为 Class 3/4，候选 <code>offset</code> 强制非正。</li>
-        <li>计算位元消耗 <code>tempRate</code> 时，EO 的开销模型为 <code>ABS(offset) + 1</code> (除了边界修正)，比 BO 略少，因为 EO 不用传输偏移符号。</li>
+        <li>在 <code>estIterOffset</code> 寻优时，因为只有单向尝试（非正或非负），因此迭代只会朝一个确定方向归零。</li>
+        <li>计算位元消耗 <code>tempRate</code> 时，EO 的开销模型为 <code>ABS(offset) + 1</code> (除了边界修正)，比 BO 略少，因为 EO 绝对不需要传输偏移符号。</li>
     </ul>
 
     <h2>4. 率失真优化 (RDO) 最佳模式抉择</h2>
