@@ -96,9 +96,9 @@
 
     <div style="background: #fafafa; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 30px 0; display: flex; gap: 30px;">
         <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-            <div style="color: #333; margin-bottom: 15px; font-weight: bold;">64x64 CTB Z-Scan 遍历状态</div>
-            <div id="ctu-grid" style="width: 320px; height: 320px; background: #fff; position: relative; border: 2px solid #cbd5e1;">
-                <!-- 动态生成 8x8 网格 -->
+            <div style="color: #333; margin-bottom: 15px; font-weight: bold;">64x64 CTB Z-Scan 遍历状态 (支持随机划分)</div>
+            <div id="ctu-grid" style="width: 320px; height: 320px; background: #fff; position: relative; border: 2px solid #cbd5e1; box-shadow: inset 0 0 10px rgba(0,0,0,0.05);">
+                <!-- 动态生成真实大小的 CU -->
             </div>
             <div style="margin-top: 20px;">
                 <button id="btn-next-step" style="padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s;">执行下一步 (Next Leaf)</button>
@@ -107,24 +107,24 @@
         </div>
         
         <div style="flex: 1; background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-            <div style="color: #333; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">硬件 FSM 寄存器监控看板 (Virtual Stack)</div>
+            <div style="color: #333; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">硬件 FSM 寄存器与深度栈 (Virtual Stack)</div>
             
             <div style="margin-bottom: 15px; font-family: monospace; font-size: 1.1em;">
-                <div style="color: #64748b; margin-bottom: 5px;">cb_cnt[1] (32x32 层游标)</div>
+                <div style="color: #64748b; margin-bottom: 5px;">cb_cnt[1] (32x32 层游标) <span id="fsm-status-1" style="font-size: 0.8em; color: #10b981;">[Active]</span></div>
                 <div style="display: flex; gap: 5px;">
                     <div class="fsm-box fsm-1" data-val="0">0</div><div class="fsm-box fsm-1" data-val="1">1</div><div class="fsm-box fsm-1" data-val="2">2</div><div class="fsm-box fsm-1" data-val="3">3</div>
                 </div>
             </div>
             
             <div style="margin-bottom: 15px; font-family: monospace; font-size: 1.1em;">
-                <div style="color: #64748b; margin-bottom: 5px;">cb_cnt[2] (16x16 层游标)</div>
+                <div style="color: #64748b; margin-bottom: 5px;">cb_cnt[2] (16x16 层游标) <span id="fsm-status-2" style="font-size: 0.8em; color: #94a3b8;">[Inactive]</span></div>
                 <div style="display: flex; gap: 5px;">
                     <div class="fsm-box fsm-2" data-val="0">0</div><div class="fsm-box fsm-2" data-val="1">1</div><div class="fsm-box fsm-2" data-val="2">2</div><div class="fsm-box fsm-2" data-val="3">3</div>
                 </div>
             </div>
             
             <div style="margin-bottom: 15px; font-family: monospace; font-size: 1.1em;">
-                <div style="color: #64748b; margin-bottom: 5px;">cb_cnt[3] (8x8 层游标)</div>
+                <div style="color: #64748b; margin-bottom: 5px;">cb_cnt[3] (8x8 层游标) <span id="fsm-status-3" style="font-size: 0.8em; color: #94a3b8;">[Inactive]</span></div>
                 <div style="display: flex; gap: 5px;">
                     <div class="fsm-box fsm-3" data-val="0">0</div><div class="fsm-box fsm-3" data-val="1">1</div><div class="fsm-box fsm-3" data-val="2">2</div><div class="fsm-box fsm-3" data-val="3">3</div>
                 </div>
@@ -132,92 +132,159 @@
 
             <div style="margin-top: 30px; padding: 15px; background: #e3f2fd; border-left: 4px solid var(--secondary); color: #333; font-size: 0.9em;">
                 <strong>硬件逻辑映射：</strong><br>
-                当前处理的 8x8 块物理坐标 = <br>
-                <code style="background:none; color:var(--primary); padding:0; border:none;">X = (cb_cnt[1]&1)*32 + (cb_cnt[2]&1)*16 + (cb_cnt[3]&1)*8</code><br>
-                <code style="background:none; color:var(--primary); padding:0; border:none;">Y = (cb_cnt[1]>>1)*32 + (cb_cnt[2]>>1)*16 + (cb_cnt[3]>>1)*8</code>
+                如果遇到 <code>split_flag == 1</code>，进栈 (向下挖)；<br>
+                如果遇到 <code>split_flag == 0</code>，处理当前 CU，而后游标递增，逢 4 出栈。<br>
+                当前处理的宏块大小：<code id="current-cu-size" style="background:none; color:var(--primary); font-size:1.1em; font-weight:bold;">--</code>
             </div>
         </div>
     </div>
 
     <style>
-        .fsm-box { width: 40px; height: 30px; background: #f8fafc; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center; color: #64748b; border-radius: 4px; transition: all 0.2s; }
+        .fsm-box { width: 40px; height: 30px; background: #f8fafc; border: 1px solid #cbd5e1; display: flex; align-items: center; justify-content: center; color: #94a3b8; border-radius: 4px; transition: all 0.2s; }
         .fsm-box.active { background: var(--primary); color: white; border-color: var(--secondary); box-shadow: 0 0 10px rgba(2, 136, 209, 0.5); font-weight: bold; }
-        .grid-leaf { position: absolute; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; transition: background 0.3s; }
-        .grid-leaf.scanned { background: rgba(16, 185, 129, 0.3); border-color: #10b981; }
-        .grid-leaf.current { background: rgba(2, 136, 209, 0.6); border-color: var(--primary); z-index: 10; box-shadow: 0 0 15px rgba(2, 136, 209, 0.8); }
+        .fsm-box.inactive { background: #e2e8f0; opacity: 0.4; }
+        .cu-leaf { position: absolute; border: 1px solid #cbd5e1; box-sizing: border-box; transition: background 0.3s; background: #f8fafc; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #94a3b8; }
+        .cu-leaf.scanned { background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #059669; }
+        .cu-leaf.current { background: rgba(2, 136, 209, 0.6); border-color: var(--primary); z-index: 10; box-shadow: 0 0 15px rgba(2, 136, 209, 0.8); color: white; font-weight: bold; }
     </style>
 
     <script>
         const ctuGrid = document.getElementById('ctu-grid');
-        const cb_cnt = [0, 0, 0, 0]; // 0 is dummy
+        
+        // 模拟来自 CU Control FIFO 的真实异构划分数据 (1=split, 0=leaf)
+        const splitMap = {
+            '0': 0, // Node 0: 不划分，保持 32x32
+            '1': 1, // Node 1: 划分为 16x16
+            '2': 1, // Node 2: 划分为 16x16
+            '3': 0, // Node 3: 不划分，保持 32x32
+            // Node 1 的子节点 (16x16)
+            '1_0': 0, // 16x16
+            '1_1': 1, // 划分为 8x8
+            '1_2': 0, // 16x16
+            '1_3': 0, // 16x16
+            // Node 2 的子节点 (16x16)
+            '2_0': 1, // 划分为 8x8
+            '2_1': 0, // 16x16
+            '2_2': 0, // 16x16
+            '2_3': 1  // 划分为 8x8
+        };
+
+        let depth = 1; // 1=32x32, 2=16x16, 3=8x8
+        let cb_cnt = [0, 0, 0, 0];
         let isRunning = false;
         let timer = null;
-        let leaves = [];
+        let domMap = {}; // 缓存创建的 DOM
 
-        // 初始化网格
-        for (let i = 0; i < 64; i++) {
-            const leaf = document.createElement('div');
-            leaf.className = 'grid-leaf';
-            leaf.style.width = '40px';
-            leaf.style.height = '40px';
-            leaves.push(leaf);
-            ctuGrid.appendChild(leaf);
+        function getSplitFlag() {
+            if (depth === 1) return splitMap[`${cb_cnt[1]}`] || 0;
+            if (depth === 2) return splitMap[`${cb_cnt[1]}_${cb_cnt[2]}`] || 0;
+            return 0; // 深度 3 不能再划分
+        }
+
+        // FSM 状态机：往下钻取直到遇到叶子节点
+        function diveToLeaf() {
+            while (depth < 3) {
+                if (getSplitFlag() === 1) {
+                    depth++;
+                    cb_cnt[depth] = 0;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        function initFSM() {
+            depth = 1;
+            cb_cnt = [0, 0, 0, 0];
+            diveToLeaf();
+            document.querySelectorAll('.cu-leaf').forEach(el => {
+                el.classList.remove('scanned');
+                el.classList.remove('current');
+            });
+            updateUI();
+        }
+
+        function getRect() {
+            let x = 0, y = 0, size = 320;
+            if (depth >= 1) { x += (cb_cnt[1] & 1) * 160; y += (cb_cnt[1] >> 1) * 160; size = 160; }
+            if (depth >= 2) { x += (cb_cnt[2] & 1) * 80;  y += (cb_cnt[2] >> 1) * 80;  size = 80;  }
+            if (depth >= 3) { x += (cb_cnt[3] & 1) * 40;  y += (cb_cnt[3] >> 1) * 40;  size = 40;  }
+            return {x, y, size};
         }
 
         function updateUI() {
-            // 更新坐标
-            const x1 = (cb_cnt[1] & 1) * 160; const y1 = (cb_cnt[1] >> 1) * 160;
-            const x2 = (cb_cnt[2] & 1) * 80;  const y2 = (cb_cnt[2] >> 1) * 80;
-            const x3 = (cb_cnt[3] & 1) * 40;  const y3 = (cb_cnt[3] >> 1) * 40;
+            // 1. 根据当前状态获取物理坐标
+            const rect = getRect();
+            const id = `cu_${rect.x}_${rect.y}_${rect.size}`;
             
-            const finalX = x1 + x2 + x3;
-            const finalY = y1 + y2 + y3;
+            document.querySelectorAll('.cu-leaf').forEach(el => el.classList.remove('current'));
 
-            // 更新格子状态
-            document.querySelectorAll('.grid-leaf').forEach(el => el.classList.remove('current'));
-            
-            // 找到对应的 leaf
-            const targetLeaf = leaves.find(l => l.style.left === finalX+'px' && l.style.top === finalY+'px');
-            if(targetLeaf) {
-                targetLeaf.classList.add('scanned');
-                targetLeaf.classList.add('current');
+            // 动态创建并渲染块
+            let leafEl = domMap[id];
+            if (!leafEl) {
+                leafEl = document.createElement('div');
+                leafEl.className = 'cu-leaf current scanned';
+                leafEl.style.left = rect.x + 'px';
+                leafEl.style.top = rect.y + 'px';
+                leafEl.style.width = rect.size + 'px';
+                leafEl.style.height = rect.size + 'px';
+                let cuSize = (rect.size / 320) * 64;
+                leafEl.innerText = `${cuSize}`;
+                ctuGrid.appendChild(leafEl);
+                domMap[id] = leafEl;
             } else {
-                // 初次绑定位置
-                const idx = (cb_cnt[1]*16) + (cb_cnt[2]*4) + cb_cnt[3];
-                if(leaves[idx]) {
-                    leaves[idx].style.left = finalX + 'px';
-                    leaves[idx].style.top = finalY + 'px';
-                    leaves[idx].classList.add('scanned');
-                    leaves[idx].classList.add('current');
-                }
+                leafEl.classList.add('current');
+                leafEl.classList.add('scanned');
             }
 
-            // 更新寄存器 UI
+            // 2. 更新寄存器状态 UI
             for(let level=1; level<=3; level++) {
+                const statusEl = document.getElementById(`fsm-status-${level}`);
+                if (level <= depth) {
+                    statusEl.innerText = "[Active]";
+                    statusEl.style.color = "#10b981";
+                } else {
+                    statusEl.innerText = "[Inactive]";
+                    statusEl.style.color = "#94a3b8";
+                }
+
                 document.querySelectorAll(`.fsm-${level}`).forEach(el => {
-                    el.classList.remove('active');
-                    if (parseInt(el.getAttribute('data-val')) === cb_cnt[level]) {
+                    el.classList.remove('active', 'inactive');
+                    if (level > depth) {
+                        el.classList.add('inactive');
+                    } else if (parseInt(el.getAttribute('data-val')) === cb_cnt[level]) {
                         el.classList.add('active');
                     }
                 });
             }
+            
+            let cuSizeText = (rect.size / 320) * 64;
+            document.getElementById('current-cu-size').innerText = `${cuSizeText}x${cuSizeText}`;
         }
 
         function stepFSM() {
-            cb_cnt[3]++;
-            if (cb_cnt[3] > 3) {
-                cb_cnt[3] = 0;
-                cb_cnt[2]++;
-                if (cb_cnt[2] > 3) {
-                    cb_cnt[2] = 0;
-                    cb_cnt[1]++;
-                    if (cb_cnt[1] > 3) {
-                        // 扫描完成一整个 CTU，重置
-                        cb_cnt[1] = 0;
-                        document.querySelectorAll('.grid-leaf').forEach(el => el.classList.remove('scanned'));
-                    }
+            // 我们当前在一个叶子节点上。处理完毕后，需要出栈或步进。
+            while (depth > 0) {
+                if (cb_cnt[depth] < 3) {
+                    cb_cnt[depth]++;
+                    break;
+                } else {
+                    // 当前层级满了，清零并弹栈
+                    cb_cnt[depth] = 0;
+                    depth--;
                 }
             }
+
+            if (depth === 0) {
+                // CTU 处理完毕，重置
+                ctuGrid.innerHTML = '';
+                domMap = {};
+                initFSM();
+                return;
+            }
+
+            // 看看新的游标位置是否需要分裂
+            diveToLeaf();
             updateUI();
         }
 
@@ -228,14 +295,14 @@
                 e.target.innerText = "自动扫描";
                 e.target.style.background = "#3b82f6";
             } else {
-                timer = setInterval(stepFSM, 150);
+                timer = setInterval(stepFSM, 300);
                 e.target.innerText = "停止扫描";
                 e.target.style.background = "#ef4444";
             }
             isRunning = !isRunning;
         });
 
-        updateUI(); // init
+        initFSM(); // init
     </script>
 
     <h2>3. CABAC 数学归一化引擎 (Renormalization)</h2>
