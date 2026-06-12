@@ -139,33 +139,144 @@
     <h3>2.3 连续 4 个起步带 (subTypeIdx) 是如何确定的？(滑动窗口寻优)</h3>
     <p>虽然像素全域被划分为了 32 个 Band，但考虑到编码开销，SAO 规定每个 CTU <strong>最多只能选取连续的 4 个 Band</strong> 进行补偿。这 4 个连续 Band 的起步位置 (<code>subTypeIdx</code>) 是通过<strong>滑动窗口扫描</strong>决定的：</p>
     
-    <div class="mermaid">
-    graph TD
-        subgraph SG1 [像素值全域 32个Band]
-            direction LR
-            B0[B0] --- B1[B1] --- B2[B2] --- B3[B3] --- B4[B4] --- B5[B5] --- B6[...] --- B31[B31]
-        end
+    <div class="animation-container" style="background: #1e1e1e; padding: 20px; border-radius: 8px; font-family: 'Consolas', monospace; color: #fff; margin: 20px 0; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div>
+                <h4 style="margin: 0; color: #4fc3f7;">[▶ 互动演示] BO 最佳起步带 (subTypeIdx) 滑动窗口寻优</h4>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #888;">* 图注：点击右侧按钮，直观体验 C-Model 如何通过遍历 29 次窗口挑选出 Cost 最小的起步带。</p>
+            </div>
+            <button id="playBtn" style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.3s;">开始扫描</button>
+        </div>
         
-        subgraph SG2 [编码器滑动窗口扫描 寻找最佳起步带]
-            W0[窗口 0 包含 B0 到 B3] -.-> C0((Cost 0))
-            W1[窗口 1 包含 B1 到 B4] -.-> C1((Cost 1))
-            W2[窗口 2 包含 B2 到 B5] -.-> C2((Cost 2))
-            W_dots[...] -.-> C_dots((...))
-            W28[窗口 28 包含 B28 到 B31] -.-> C28((Cost 28))
-        end
+        <div style="position: relative; height: 50px; display: flex; align-items: center; background: #2d2d2d; border-radius: 4px; padding: 0 10px; margin-bottom: 20px;">
+            <!-- 32 Bands -->
+            <div id="bandContainer" style="display: flex; width: 100%; position: relative;">
+                <!-- JS 会动态生成 32 个频带格 -->
+            </div>
+            <!-- Sliding Window -->
+            <div id="slidingWindow" style="position: absolute; top: -5px; height: 40px; border: 3px solid #ff9800; border-radius: 4px; background: rgba(255, 152, 0, 0.2); transition: left 0.2s ease-in-out; pointer-events: none; z-index: 10;"></div>
+        </div>
         
-        C0 --> RDO{抉择全局最小 Cost}
-        C1 --> RDO
-        C2 --> RDO
-        C_dots --> RDO
-        C28 --> RDO
-        
-        RDO ==> Best[最佳起步带 例如选定 i=2]
-        Best -.-> Result[仅对属于 B2, B3, B4, B5 的像素加偏置]
-        
-        style RDO fill:#ff9800,stroke:#333,stroke-width:2px,color:#fff
-        style Best fill:#4caf50,stroke:#333,stroke-width:2px,color:#fff
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 1; background: #333; padding: 15px; border-radius: 4px;">
+                <div style="color: #bbb; font-size: 12px; text-transform: uppercase;">当前尝试的窗口</div>
+                <div style="font-size: 18px; margin: 5px 0;">窗口游标 (i): <span id="curIdx" style="color: #ff9800;">0</span></div>
+                <div style="font-size: 14px; color: #aaa;">包含的连续频带: Band <span id="curBands">0~3</span></div>
+                <div style="font-size: 16px; margin-top: 10px;">当前总 Cost = <span id="curCost">---</span></div>
+            </div>
+            <div style="flex: 1; background: #2e7d32; padding: 15px; border-radius: 4px; box-shadow: inset 0 0 10px rgba(0,0,0,0.3); transition: background 0.3s;">
+                <div style="color: #a5d6a7; font-size: 12px; text-transform: uppercase;">🏆 RDO 历史最优记录</div>
+                <div style="font-size: 18px; margin: 5px 0;">当前最强起步带: <span id="bestIdx" style="color: #fff; font-weight: bold;">--</span></div>
+                <div style="font-size: 14px; color: #c8e6c9;">准备补偿: Band <span id="bestBands">--</span></div>
+                <div style="font-size: 16px; margin-top: 10px;">发现的最小 Cost = <span id="bestCost" style="display: inline-block; transition: all 0.2s;">---</span></div>
+            </div>
+        </div>
     </div>
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const bandContainer = document.getElementById('bandContainer');
+            const slidingWindow = document.getElementById('slidingWindow');
+            const playBtn = document.getElementById('playBtn');
+            const curIdxEl = document.getElementById('curIdx');
+            const curBandsEl = document.getElementById('curBands');
+            const curCostEl = document.getElementById('curCost');
+            const bestIdxEl = document.getElementById('bestIdx');
+            const bestBandsEl = document.getElementById('bestBands');
+            const bestCostEl = document.getElementById('bestCost');
+            
+            let costs = [];
+            // 生成模拟数据：让最小值出现在 index=17 (即 Band 17~20)
+            for(let i=0; i<29; i++) {
+                let base = Math.abs(i - 17) * 50 + 100;
+                costs.push(base + Math.floor(Math.random() * 30));
+            }
+    
+            // 初始化 32 个 Band 背景条
+            for(let i=0; i<32; i++) {
+                let b = document.createElement('div');
+                b.style.flex = "1";
+                b.style.textAlign = "center";
+                b.style.fontSize = "10px";
+                b.style.color = "#777";
+                b.style.borderRight = i < 31 ? "1px solid #444" : "none";
+                b.innerText = i;
+                bandContainer.appendChild(b);
+            }
+            
+            function updateWindowPosition(idx) {
+                const bandWidth = 100 / 32;
+                slidingWindow.style.width = `calc(${bandWidth * 4}%)`;
+                slidingWindow.style.left = `calc(${bandWidth * idx}%)`;
+            }
+            updateWindowPosition(0);
+            
+            let interval;
+            let isPlaying = false;
+            let scanIdx = 0;
+            let globalMinCost = Infinity;
+            let globalBestIdx = -1;
+    
+            playBtn.addEventListener('click', () => {
+                if (isPlaying) return;
+                isPlaying = true;
+                playBtn.innerText = "正在打擂台扫描...";
+                playBtn.style.background = "#ff9800";
+                
+                scanIdx = 0;
+                globalMinCost = Infinity;
+                globalBestIdx = -1;
+                bestIdxEl.innerText = "--";
+                bestBandsEl.innerText = "--";
+                bestCostEl.innerText = "---";
+    
+                interval = setInterval(() => {
+                    if (scanIdx > 28) {
+                        clearInterval(interval);
+                        isPlaying = false;
+                        playBtn.innerText = "重新扫描体验";
+                        playBtn.style.background = "#4caf50";
+                        slidingWindow.style.borderColor = "#4caf50";
+                        slidingWindow.style.background = "rgba(76, 175, 80, 0.4)";
+                        
+                        // 动画结束后，窗口飞回最优位置
+                        updateWindowPosition(globalBestIdx);
+                        curIdxEl.innerText = globalBestIdx;
+                        curBandsEl.innerText = `${globalBestIdx}~${globalBestIdx+3} (终极胜出者!)`;
+                        curCostEl.innerText = globalMinCost;
+                        return;
+                    }
+                    
+                    slidingWindow.style.borderColor = "#ff9800";
+                    slidingWindow.style.background = "rgba(255, 152, 0, 0.2)";
+                    updateWindowPosition(scanIdx);
+                    
+                    let currentCost = costs[scanIdx];
+                    curIdxEl.innerText = scanIdx;
+                    curBandsEl.innerText = `${scanIdx}~${scanIdx+3}`;
+                    curCostEl.innerText = currentCost;
+                    
+                    if (currentCost < globalMinCost) {
+                        globalMinCost = currentCost;
+                        globalBestIdx = scanIdx;
+                        bestIdxEl.innerText = globalBestIdx;
+                        bestBandsEl.innerText = `${globalBestIdx}~${globalBestIdx+3}`;
+                        bestCostEl.innerText = globalMinCost;
+                        
+                        // 微动效提示：找到新的极小值了！
+                        bestCostEl.style.color = "#ffeb3b";
+                        bestCostEl.style.transform = "scale(1.3)";
+                        setTimeout(() => { 
+                            bestCostEl.style.color = "#fff"; 
+                            bestCostEl.style.transform = "scale(1)";
+                        }, 200);
+                    }
+                    
+                    scanIdx++;
+                }, 150); // 150ms 的扫描速度
+            });
+        });
+    </script>
     
     <p>在 C-Model 的代码中，这是一个由 <code>i</code> (从 0 遍历到 28) 控制的 <code>for</code> 循环。对于每个起步位置 <code>i</code>，编码器会将 <code>i, i+1, i+2, i+3</code> 这 4 个带独立算出来的最优代价 <code>tempCost</code> 加起来，最后挑选出总代价最小的那一组，将其起步位置记作 <code>subTypeIdx</code> 写入码流。</p>
 
