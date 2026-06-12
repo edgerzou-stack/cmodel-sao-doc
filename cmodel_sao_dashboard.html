@@ -295,6 +295,19 @@
         </ul>
     </div>
 
+    <h3>2.5 架构级执行时序：BO 的像素分布统计是如何进行的？</h3>
+    <p>在理解了滑动窗口和 RDO 抉择后，我们必须理清底层 C-Model 真实的执行时序：编码器 <strong>绝对不是</strong> 先选定某一个 Band，然后再去全图数一遍有多少像素落在这个 Band 里。</p>
+    <div class="highlight" style="background-color: #f1f8e9; border-color: #8bc34a;">
+        <strong>🚀 C-Model 真实执行时序 (一次过检，全盘统计)：</strong><br>
+        在统计阶段的 <code>calcSaoStatsCuOrg</code> 函数中，编码器只对 CTU 进行 <strong>唯一的一遍</strong> 像素扫描。
+        <ol style="margin-bottom: 5px;">
+            <li><strong>并行分拣：</strong> 拿到一个像素，比如亮度 100，直接提取前 5 个 bit (<code>100 >> 3 = 12</code>)，就知道它属于 Band 12。</li>
+            <li><strong>装进篓子：</strong> 直接把它扔进 Band 12 的统计槽里，让 <code>count[12]++</code>，并累加它的失真误差。</li>
+            <li><strong>瞬间查表：</strong> 这一遍扫完后，32 个 Band 各自装了多少个像素、总误差是多少，就已经 <strong>全部一次性统计完毕</strong>。</li>
+        </ol>
+        <strong>结论：</strong> 编码器是先“全局分拣统计所有带的像素个数（32个篓子全部装满）”，然后再进入 2.3 节的“滑动窗口”步骤。在滑动窗口时，<strong>完全不需要再去触碰任何真实的图像像素</strong>，纯粹靠读取篓子里的统计数据（查表）就能算出总 Cost。这一绝妙的时序设计极大地节省了硬件和算法的内存访问带宽（Memory Bandwidth）。
+    </div>
+
     <h2>3. Edge Offset (EO - 边缘偏移) 模式</h2>
     <p>EO 模式利用像素间的局部空间梯度，比较当前像素与其邻居的大小关系，根据分类 (Class) 来补偿。</p>
     
