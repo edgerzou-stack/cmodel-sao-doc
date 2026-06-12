@@ -211,18 +211,17 @@
     <p>在 <code>rdoSaoUnitAll</code> 函数中，编码器会遍历所有可能的模式，并最终抉择出使得 <strong>RD Cost</strong> 最小的模式。其抉择逻辑如下：</p>
 
     <div style="background: #fff; padding: 20px; border-left: 4px solid var(--accent); margin: 20px 0; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-        <h4 style="color: var(--accent); margin-top: 0;">RDO 抉择流程 (C-Model 实现)</h4>
+        <h4 style="color: var(--accent); margin-top: 0;">CTU 级打擂台流程 (C-Model 实现)</h4>
         <ol>
-            <li><strong>统计基础数据 (calcSaoStatsCuOrg)</strong>：先遍历 CTU，收集 32 个 BO 频带和 4 种 EO 方向各 4 个 Class 的 <code>offsetOrg</code> 和像素 <code>count</code>。</li>
-            <li><strong>计算各模式的最优代价</strong>：
+            <li><strong>前置基础数据 (calcSaoStatsCuOrg)</strong>：CTU 在进入宏观抉择前，已经利用前文提到的微观迭代算法，独立求出了各个 BO 频带和 4 种 EO 方向各 Class 的最佳 <code>offset</code> 及其对应的最小代价 <code>tempCost</code>。</li>
+            <li><strong>汇总各模式的总代价</strong>：
                 <ul>
-                    <li>对于 BO：尝试 32 种可能的起步带 (subTypeIdx)，将连续 4 个带的最佳 <code>tempCost</code> 累加。</li>
-                    <li>对于 EO：分别计算水平、垂直、135度、45度四种模式下，各 Class 的 <code>tempCost</code> 之和。</li>
-                    <li>代价公式 (Fix-point 实现)：<code>tempCost = tempDist + ((lambda * tempRate) >> 16)</code></li>
+                    <li><strong>BO 的总代价</strong>：尝试 32 种可能的起步带 (subTypeIdx)，将连续 4 个带的最佳微观 <code>tempCost</code> <strong>累加</strong>，选出总代价最小的起步带组合。</li>
+                    <li><strong>EO 的总代价</strong>：分别针对水平、垂直、135度、45度四种方向，将该方向下 4 个 Class 的微观 <code>tempCost</code> <strong>累加</strong>，得出四种方向各自的总代价。</li>
                 </ul>
             </li>
-            <li><strong>考察相邻 Merge 模式</strong>：尝试 <code>Merge Left</code> (拷贝左侧 CTU 参数) 和 <code>Merge Up</code> (拷贝上方 CTU 参数)。由于 Merge 模式无需传输大量参数，其 <code>tempRate</code> 极低，往往能获得更小的 Cost。</li>
-            <li><strong>最终抉择</strong>：比较 SAO_OFF (不滤波)、SAO_BO (最佳起步带)、SAO_EO (最佳方向)、Merge Left 和 Merge Up 的总代价，选择 Cost 最小的配置，将结果写入 <code>saoLcuParam</code> 并进入后续 <code>processSaoUnitPic</code> 进行物理补偿。</li>
+            <li><strong>考察相邻 Merge 模式</strong>：额外尝试 <code>Merge Left</code> (直接复用左侧 CTU 算好的所有参数) 和 <code>Merge Up</code> (复用上方 CTU 参数)。Merge 模式因为不需要写入具体的 offset 和模式参数，其宏观 <code>Rate</code> 极低，总 Cost 往往极具竞争力。</li>
+            <li><strong>终极抉择</strong>：比较 SAO_OFF (不滤波)、SAO_BO (最佳连续4带组合)、SAO_EO (4个方向中最佳的那个)、Merge Left 和 Merge Up 的总代价，选择 Cost 最小的配置，作为整个 CTU 的终极模式并写入 <code>saoLcuParam</code>。</li>
         </ol>
     </div>
 
