@@ -422,7 +422,8 @@
         <h1 style="margin: 0; color: #1e293b; font-size: 1.8em;">Part II: 压缩引擎层 (CABAC Compression Engine)</h1>
         <p style="margin: 10px 0 0 0; color: #475569; font-size: 0.95em;">深入 CABAC 的心脏：从 CU 语法元素字典的映射，到最终算术压缩挤出比特的完整流程。</p>
     </div>
-<h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">3. 字典与映射：CU 级语法元素速查表</h2>
+<h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">3. 核心机制：CABAC 语法字典与全链路剖析</h2>
+<h3 style="margin-top: 30px; color: #0284c7; border-left: 4px solid #0284c7; padding-left: 10px;">3.1 字典与映射：CU 级语法元素速查表</h3>
     <p>CABAC 引擎每天都在疯狂地咀嚼各种“语法元素”。为了方便后续开发和 Debug，我为你整理了 HEVC 中最核心的 CU/PU/TU 级别语法元素及其对应的二值化武器和上下文依赖：</p>
 
     <div style="overflow-x: auto; margin-top: 20px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
@@ -491,7 +492,7 @@
         </table>
     </div>
 
-    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">4. 核心机制：CABAC 编码全链路剖析</h2>
+    <h3 style="margin-top: 40px; color: #0284c7; border-left: 4px solid #0284c7; padding-left: 10px;">3.2 算术编码架构：CABAC 的完整数据流向</h3>
     <p>很多初学者在学习 CABAC 时，往往会把“语法元素”和“底层算术引擎”割裂开来。实际上，它们是一条流水线。<br>
     上一节的状态机产生了诸如 <code>MVD</code>、<code>Skip_flag</code> 等高层语法元素，这些元素必须经过<strong>二值化 (Binarizer)</strong> 变成纯粹的 0 和 1 (Bin)，才能送入底层的 <strong>算术引擎 (Arithmetic Engine)</strong> 进行压缩。</p>
 
@@ -521,41 +522,7 @@
         </div>
     </div>
 
-    <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
-        <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">🛠️ 深度解析：Binarizer (二值化器) 的三大核心兵器</h4>
-        <p style="font-size: 0.95em; color: #475569;">在把十进制的语法元素喂给底层算盘前，硬件的 Binarizer 模块必须按特定算法将其“切碎”成 0 和 1 (Bins)。因为算术编码本质上是在二叉树上寻路。HEVC 中主要使用以下三种二值化算法：</p>
-        
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 15px;">
-            <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px;">
-                <h5 style="margin-top: 0; color: #0284c7;">1. 一元码 (Unary)</h5>
-                <p style="font-size: 0.85em; color: #475569; line-height: 1.6;">最暴力的算法。数字 N 就用 N 个 <code>1</code> 加上一个 <code>0</code> 结尾来表示。<br><br>
-                <strong style="color: #0ea5e9;">举例：N = 3</strong><br>
-                输出 Bins：<code>1 1 1 0</code><br><br>
-                <em>用途：小数值或受限数值，如 <code>merge_idx</code>、<code>part_mode</code> 等。</em></p>
-            </div>
-            
-            <div style="background: #fdf4ff; border: 1px solid #f0abfc; padding: 15px; border-radius: 8px;">
-                <h5 style="margin-top: 0; color: #c026d3;">2. 截断莱斯编码 (Truncated Rice, TR)</h5>
-                <p style="font-size: 0.85em; color: #475569; line-height: 1.6;">将数字 X 拆分为商(q)和余数(r)。商用一元码编码，余数用定长二进制编码。参数 K 决定除数 (2^K)。<br><br>
-                <strong style="color: #d946ef;">举例：X=5, 参数K=1</strong><br>
-                除数是 2^1=2。<br>
-                商 q = 5>>1 = 2 (一元码编为 <code>1 1 0</code>)<br>
-                余 r = 5&1 = 1 (长度为K=1，编为定长 <code>1</code>)<br>
-                输出 Bins：<code>1 1 0 1</code><br><br>
-                <em>用途：极高频出现，但数值范围较大的量化系数绝对值的剩余部分 (<code>coeff_abs_level_remaining</code>)。</em></p>
-            </div>
-            
-            <div style="background: #fffbeb; border: 1px solid #fcd34d; padding: 15px; border-radius: 8px;">
-                <h5 style="margin-top: 0; color: #d97706;">3. k阶指数哥伦布 (Exp-Golomb, EGk)</h5>
-                <p style="font-size: 0.85em; color: #475569; line-height: 1.6;">专为大数值设计的动态长度编码。将数值加偏置后，拆分成“前缀”(表示长度的一元码)和“后缀”(纯二进制)。<br><br>
-                <strong style="color: #f59e0b;">举例：X=1, EG0阶</strong><br>
-                加偏置 X'=1+1=2 (二进制为 <code>10</code>)。<br>
-                拿掉最高位1，剩下 <code>0</code> 作为后缀。后缀长1位，所以前缀是1个0。<br>
-                标准输出是 <code>0 1 0</code> (HEVC中习惯0和1翻转，所以输出 <code>1 0</code>)。 <br><br>
-                <em>用途：运动矢量差分 (<code>MVD</code>) 等跨度极大的数值。</em></p>
-            </div>
-        </div>
-    </div>
+    
 
     <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
         <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">📖 一镜到底实战演练：编码 MVD_x = 1 的全生命周期</h4>
@@ -590,7 +557,7 @@
                         <em>注：为了方便心算推演，下方的模拟器采用了一个近似的整数 <code>Range = 500</code> 作为初始状态。</em>
                     </p>
                     <hr style="border: none; border-top: 1px dashed #bae6fd; margin: 10px 0;">
-                    </p><h3 style="margin-top: 30px; margin-bottom: 15px; color: #0369a1; border-left: 4px solid #0369a1; padding-left: 10px;">4.2 乘法器的终结：Range 查表切分机制</h3>
+                    </p><h3 style="margin-top: 30px; margin-bottom: 15px; color: #0369a1; border-left: 4px solid #0369a1; padding-left: 10px;">3.4 乘法器的终结：Range 查表切分机制</h3>
 <p style="font-size: 0.85em; margin: 0; color: #0c4a6e; line-height: 1.5;">
                         <strong>🔥 深入灵魂的拷问：Range 怎么按概率切分？需要算乘法吗？</strong><br>
                         你可能会想：切分区间不就是 <code>R_LPS = Range × P_LPS</code> 吗？在芯片里算乘法可是非常昂贵且缓慢的！<br>
@@ -725,7 +692,7 @@
     </script>
 
     
-    <h3 style="margin-top: 40px; color: #8b5cf6; border-left: 4px solid #8b5cf6; padding-left: 10px;">4.3 压轴实战：16 个残差系数 (Coeff) 的“五趟扫描”</h3>
+    <h3 style="margin-top: 40px; color: #8b5cf6; border-left: 4px solid #8b5cf6; padding-left: 10px;">3.5 压轴实战：16 个残差系数 (Coeff) 的“五趟扫描”</h3>
 
     <p style="font-size: 0.95em; color: #475569;">当你看到上面的 <code>coeff_abs_level_remaining</code> 时，你猜测“是不是把 16 个像素值直接位拼接起来？”<br>
     <strong>答案是：绝对不是！</strong> 视频压缩中最占体积的就是残差系数 (Coeff)，如果直接拼接，压缩率会奇差无比。HEVC 对系数的编码有着极度精妙的<strong>“多趟扫描 (Multi-pass Scanning)”</strong>机制。</p>
@@ -811,8 +778,8 @@
         <h1 style="margin: 0; color: #1e293b; font-size: 1.8em;">Part III: 黑科技解密与大一统架构 (Bitstream Decryption & Unified Architecture)</h1>
         <p style="margin: 10px 0 0 0; color: #475569; font-size: 0.95em;">揭秘 HEVC 最神奇的无分隔符解码技术，以及编解码架构的对称之美。</p>
     </div>
-<h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">5. 深度解密：没有分隔符的比特流，解码端凭什么能看懂？</h2>
-    <h3 style="margin-top: 30px; color: #4c1d95; border-left: 4px solid #4c1d95; padding-left: 10px;">5.1 宏观领航：FSM 状态机与协议默契</h3>
+<h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">4. 深度解密：没有分隔符的比特流，解码端凭什么能看懂？</h2>
+    <h3 style="margin-top: 30px; color: #4c1d95; border-left: 4px solid #4c1d95; padding-left: 10px;">4.1 宏观领航：FSM 状态机与协议默契</h3>
     <p style="font-size: 0.95em; color: #475569;">这是 CABAC 学习者最常问、也是直觉上最反常识的问题：<br>
     既然 <code>Range</code> 和 <code>Low</code> 是一直连续算下去的，最后输出的 <code>.265</code> 码流只是一个纯粹的 <code>0101100...</code> 序列，<strong>里面没有任何类似 <code>\n</code> 或 <code>,</code> 的物理分隔符</strong>，那么解码器凭什么知道前 3 个 bit 是 MVD，后 1 个 bit 是 Skip Flag？</p>
 
@@ -853,7 +820,7 @@
     </div>
 
     
-<h3 style="margin-top: 40px; color: #db2777; border-left: 4px solid #db2777; padding-left: 10px;">5.2 微观刹车：自终止的前缀码机制</h3>
+<h3 style="margin-top: 40px; color: #db2777; border-left: 4px solid #db2777; padding-left: 10px;">4.2 微观刹车：自终止的前缀码机制</h3>
     <p style="font-size: 0.95em; color: #475569;">
         你可能会问：既然码流里没有分隔符，那比如在解 <code>coeff_abs_level_remaining</code> 时，解码器怎么知道当前解出的这几个 Bin 已经凑成了一个完整的元素，可以停下来进入下一个状态了？<br>
         <strong>答案是：二值化算法（如指数哥伦布、截断莱斯）本身自带“自终止 (Self-terminating)”属性！</strong>
@@ -887,7 +854,7 @@
             <strong>总结：</strong>反二值化器就像一个精密的齿轮。如果是定长编码 (FL)，它就死读固定的 N 个 Bin；如果是变长编码 (如 EGk 或 TR)，它就利用 <code>0</code> 作为刹车片，刹车后再根据数学公式滑行固定的距离。<strong>一切都在预先定义好的协议的掌控之中，一个 Bin 都不会多，也不会少。</strong>
         </p>
         
-<h3 style="margin-top: 40px; color: #b45309; border-left: 4px solid #b45309; padding-left: 10px;">5.3 底层兵法：HEVC 的四大核心二值化码表规则</h3>
+<h3 style="margin-top: 40px; color: #b45309; border-left: 4px solid #b45309; padding-left: 10px;">4.3 底层兵法：HEVC 的四大核心二值化码表规则</h3>
     <p style="font-size: 0.95em; color: #475569;">
         你在上面那张“完美对称架构图”的第 4 步看到了一个判断条件：<strong>“符合码表规则，组合成功！”</strong>。到底什么是码表规则？<br>
         实际上，HEVC 算术解码器在吃进 0 和 1 时，心里背着 4 本不同的“字典”。针对不同的语法元素，它会掏出不同的字典去“查单词”。这 4 本字典就是 HEVC 最核心的四大二值化兵法：
@@ -948,7 +915,7 @@
         </p>
     </div>
 
-<h3 style="margin-top: 40px; color: var(--primary); border-left: 4px solid var(--primary); padding-left: 10px;">5.4 架构大一统：编解码的完美对称之美</h3>
+<h3 style="margin-top: 40px; color: var(--primary); border-left: 4px solid var(--primary); padding-left: 10px;">4.4 架构大一统：编解码的完美对称之美</h3>
 
     <p style="font-size: 0.95em; color: #475569;">为了让你对“语法元素是如何变成码流，又如何从码流中复活”有一个全局的体感，我为你绘制了最后这张 <strong>CABAC 编解码对称架构图</strong>。你可以清晰地看到，解码器在做的所有事情，就是把编码器走过的路，原封不动地倒着走一遍：</p>
 
