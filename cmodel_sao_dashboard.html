@@ -330,7 +330,199 @@
         如果在谷底算出了负偏移，说明数据是异常的噪点而非典型的量化失真，C-Model 会<strong>直接将 offset 强制归 0</strong>，放弃补偿。
     </div>
 
-    <h3>3.3 EO 偏移量精确计算与举例</h3>
+    <h3>3.3 扫描与分类统计：Class Count 数量是怎么诞生的？和什么有关？</h3>
+    <p>在这个 CTU 中找出的 Class 1 像素的数量（代码中的 <code>count</code>），是一个动态统计结果，它完全取决于当前图像 <strong>真实的物理纹理复杂度</strong>。</p>
+    <p>编码器会使用一个“放大镜”地毯式扫描整个 CTU：</p>
+    <ul>
+        <li><strong>完全平坦的区域（例如蓝天）：</strong> 几乎所有像素都和邻居完全一样（<code>C == L</code> 且 <code>C == R</code>），全被归为 Class 0，此时 Class 1 的 <code>count</code> 会是 <strong>0</strong>。</li>
+        <li><strong>纹理复杂的区域（如草地、文字）或垂直斑马纹：</strong> 亮度剧烈起伏，扫描时会命中大量微观的“坑洼”，此时 Class 1 的 <code>count</code> 可能会非常庞大（如 200、500 甚至更多）。</li>
+    </ul>
+    <p>总结来说，这个数量就是当前宏块的 <strong>“画面复杂度体检报告”</strong>。下面是一个 <strong>EO_0 (水平方向)</strong> 的地毯式扫描动态演示：</p>
+
+    <div class="animation-container" style="background: #1e1e1e; padding: 20px; border-radius: 8px; color: #fff; margin: 20px 0; font-family: 'Consolas', monospace; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div>
+                <h4 style="margin: 0; color: #4fc3f7;">[▶ 互动演示] EO_0 (水平方向) 像素级地毯式扫描</h4>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #888;">* 图注：点击按钮，观察 1x3 窗口如何遍历寻找“谷底”，体检报告 count 是如何累加的。</p>
+            </div>
+            <button id="playEoBtn" style="background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.3s;">开始扫描 CTU</button>
+        </div>
+        
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <!-- Pixel Grid -->
+            <div style="flex: 2; min-width: 300px; position: relative;" id="eoGridContainer">
+                <!-- 6x6 grid -->
+                <div id="eoGrid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; background: #333; padding: 2px; border-radius: 4px;">
+                    <!-- JS 生成网格 -->
+                </div>
+                <!-- Scanner Highlight -->
+                <div id="eoScanner" style="position: absolute; border: 3px solid #ffeb3b; border-radius: 4px; background: rgba(255, 235, 59, 0.2); pointer-events: none; transition: all 0.2s; display: none; z-index: 10;"></div>
+            </div>
+            
+            <!-- Stats Panel -->
+            <div style="flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="background: #333; padding: 15px; border-radius: 4px;">
+                    <div style="color: #bbb; font-size: 12px;">当前 1x3 窗口比对</div>
+                    <div style="font-size: 16px; margin: 10px 0; font-family: monospace;">
+                        <span id="valL">L</span> &nbsp;|&nbsp;
+                        <strong id="valC" style="color: #ff9800; font-size: 22px;">C</strong> &nbsp;|&nbsp;
+                        <span id="valR">R</span>
+                    </div>
+                    <div id="eoCondition" style="color: #aaa; font-size: 14px; min-height: 20px;">等待扫描...</div>
+                </div>
+                <div style="background: #2e7d32; padding: 15px; border-radius: 4px; flex-grow: 1; transition: background 0.3s;">
+                    <div style="color: #a5d6a7; font-size: 12px; margin-bottom: 10px;">📊 CTU 纹理统计体检报告</div>
+                    <div style="font-size: 14px; margin-bottom: 5px;">平坦区域 (Class 0): <span id="cnt0" style="float: right;">0</span></div>
+                    <div style="font-size: 16px; font-weight: bold; color: #ffeb3b; margin-bottom: 5px; border-bottom: 1px dashed #555; padding-bottom: 5px;">
+                        谷底 (Class 1) 计数: <span id="cnt1" style="float: right; font-size: 24px; transition: transform 0.2s;">0</span>
+                    </div>
+                    <div style="font-size: 14px; margin-bottom: 5px; color: #ccc;">其他边缘 (Class 2/3/4): <span id="cntOther" style="float: right;">0</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const grid = document.getElementById('eoGrid');
+            const scanner = document.getElementById('eoScanner');
+            const playBtn = document.getElementById('playEoBtn');
+            const valL = document.getElementById('valL');
+            const valC = document.getElementById('valC');
+            const valR = document.getElementById('valR');
+            const cond = document.getElementById('eoCondition');
+            const cnt0El = document.getElementById('cnt0');
+            const cnt1El = document.getElementById('cnt1');
+            const cntOtherEl = document.getElementById('cntOther');
+            
+            // 构建一个伪造的 6x6 像素块用于演示
+            const pixels = [
+                [120, 120, 120, 120, 120, 120], // 平坦行
+                [130, 110, 90,  110, 140, 150], // 一个深坑 (90)
+                [100, 120, 100, 120, 100, 120], // 密集起伏 (斑马纹)
+                [50,  150, 50,  150, 50,  150], // 强锯齿起伏
+                [200, 200, 180, 180, 190, 200], // 平坦中带个坑
+                [100, 100, 100, 100, 100, 100]  // 平坦行
+            ];
+            
+            const cols = 6;
+            const rows = 6;
+            const cellEls = [];
+            
+            // 生成 UI 网格
+            for(let r=0; r<rows; r++) {
+                for(let c=0; c<cols; c++) {
+                    let cell = document.createElement('div');
+                    let val = pixels[r][c];
+                    let gray = Math.floor(val);
+                    cell.style.backgroundColor = `rgb(${gray}, ${gray}, ${gray})`;
+                    cell.style.color = gray > 128 ? "#000" : "#fff";
+                    cell.style.aspectRatio = "1/1";
+                    cell.style.display = "flex";
+                    cell.style.alignItems = "center";
+                    cell.style.justifyContent = "center";
+                    cell.style.fontWeight = "bold";
+                    cell.style.fontSize = "14px";
+                    cell.style.transition = "all 0.2s";
+                    cell.innerText = val;
+                    grid.appendChild(cell);
+                    cellEls.push(cell);
+                }
+            }
+            
+            let interval;
+            let isPlaying = false;
+            
+            playBtn.addEventListener('click', () => {
+                if (isPlaying) return;
+                isPlaying = true;
+                playBtn.innerText = "🔍 地毯式扫描中...";
+                playBtn.style.background = "#ff9800";
+                scanner.style.display = "block";
+                
+                let cnt0 = 0, cnt1 = 0, cntOther = 0;
+                cnt0El.innerText = "0"; cnt1El.innerText = "0"; cntOtherEl.innerText = "0";
+                
+                // 清除历史高亮
+                cellEls.forEach(c => c.style.border = "none");
+                
+                // 需要扫描的有左右邻居的像素 (列从 1 到 4)
+                let scanSequence = [];
+                for(let r=0; r<rows; r++) {
+                    for(let c=1; c<cols-1; c++) {
+                        scanSequence.push({r, c});
+                    }
+                }
+                
+                let i = 0;
+                interval = setInterval(() => {
+                    if (i >= scanSequence.length) {
+                        clearInterval(interval);
+                        isPlaying = false;
+                        playBtn.innerText = "重新生成体检报告";
+                        playBtn.style.background = "#4caf50";
+                        scanner.style.display = "none";
+                        cond.innerText = "✅ 扫描完成！最终计入 count 变量。";
+                        cond.style.color = "#4caf50";
+                        valL.innerText = "L"; valC.innerText = "C"; valR.innerText = "R";
+                        return;
+                    }
+                    
+                    let {r, c} = scanSequence[i];
+                    let centerCell = cellEls[r * cols + c];
+                    let leftCell = cellEls[r * cols + c - 1];
+                    let rightCell = cellEls[r * cols + c + 1];
+                    
+                    // 移动高亮扫描框
+                    let gridRect = grid.getBoundingClientRect();
+                    let leftRect = leftCell.getBoundingClientRect();
+                    let rightRect = rightCell.getBoundingClientRect();
+                    
+                    scanner.style.left = (leftRect.left - gridRect.left - 2) + "px";
+                    scanner.style.top = (leftRect.top - gridRect.top - 2) + "px";
+                    scanner.style.width = (rightRect.right - leftRect.left + 4) + "px";
+                    scanner.style.height = (leftRect.height + 4) + "px";
+                    
+                    let vL = pixels[r][c-1];
+                    let vC = pixels[r][c];
+                    let vR = pixels[r][c+1];
+                    
+                    valL.innerText = vL;
+                    valC.innerText = vC;
+                    valR.innerText = vR;
+                    
+                    if (vC === vL && vC === vR) {
+                        cond.innerText = "C == L 且 C == R (平坦区)";
+                        cond.style.color = "#aaa";
+                        cnt0++;
+                        cnt0El.innerText = cnt0;
+                    } else if (vC < vL && vC < vR) {
+                        cond.innerText = "C < L 且 C < R (🎉 命中谷底!)";
+                        cond.style.color = "#ffeb3b";
+                        cnt1++;
+                        cnt1El.innerText = cnt1;
+                        
+                        // 永久高亮标出命中的谷底
+                        centerCell.style.border = "3px solid #ffeb3b";
+                        centerCell.style.boxSizing = "border-box";
+                        
+                        // 计数器跳动动画
+                        cnt1El.style.transform = "scale(1.5)";
+                        setTimeout(() => { cnt1El.style.transform = "scale(1)"; }, 150);
+                    } else {
+                        cond.innerText = "其他边缘特征 (山顶/台阶)";
+                        cond.style.color = "#4fc3f7";
+                        cntOther++;
+                        cntOtherEl.innerText = cntOther;
+                    }
+                    
+                    i++;
+                }, 400); // 400ms 速度，让人看清
+            });
+        });
+    </script>
+
+    <h3>3.4 EO 偏移量精确计算与举例</h3>
     <p>EO 偏移量的计算在 <code>estIterOffset</code> 中受到严格的符号约束，其数值通常很小，在 8-bit 视频中最大偏移除外被限制在 <code>[-7, 7]</code> 之间。</p>
 
     <div class="highlight" style="background-color: #f3e5f5; border-color: #ab47bc;">
