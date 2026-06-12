@@ -260,6 +260,26 @@
             
             let cuSizeText = (rect.size / 320) * 64;
             document.getElementById('current-cu-size').innerText = `${cuSizeText}x${cuSizeText}`;
+            
+            // 触发叶子节点编码的高亮展示
+            highlightEncodingPayload(cuSizeText);
+        }
+
+        function highlightEncodingPayload(cuSize) {
+            // 简单的动画效果提示当前正在处理的内容
+            const payloadBox = document.getElementById('encoding-payload-box');
+            payloadBox.style.transform = 'scale(1.02)';
+            payloadBox.style.boxShadow = '0 0 15px rgba(2, 136, 209, 0.3)';
+            
+            // 动态更新色度尺寸 (4:2:0)
+            const chromaSize = cuSize / 2;
+            document.getElementById('luma-size').innerText = `${cuSize}x${cuSize}`;
+            document.getElementById('chroma-size').innerText = `${chromaSize}x${chromaSize}`;
+
+            setTimeout(() => {
+                payloadBox.style.transform = 'scale(1)';
+                payloadBox.style.boxShadow = 'none';
+            }, 300);
         }
 
         function stepFSM() {
@@ -304,6 +324,28 @@
 
         initFSM(); // init
     </script>
+
+    <h3>2.2 到达叶子节点时，FSM 在算什么？(Luma & Chroma 编码流)</h3>
+    <p>当 Z-Scan 状态机确认当前宏块 <code>split_flag == 0</code>（即到达叶子节点 CU）时，它不再向下进栈，而是**触发 CABAC 引擎**，对该 CU 的所有语法元素进行算术编码。</p>
+    
+    <div id="encoding-payload-box" style="background: #ffffff; padding: 20px; border-left: 4px solid #10b981; border-radius: 8px; margin: 20px 0; border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; transition: all 0.3s;">
+        <div style="font-weight: bold; color: #333; margin-bottom: 15px; font-size: 1.1em;">当前 CU 节点的编码载荷 (CABAC Encoding Payload)</div>
+        
+        <ul style="color: #475569; font-size: 0.95em; line-height: 1.8;">
+            <li><strong style="color: var(--primary);">① 预测模式信息 (Prediction Info):</strong> <br>
+                从 Coding Unit Control FIFO 中读取。首先编码 <code>cu_skip_flag</code>。如果未 skip，则编码预测模式 (Intra/Inter)。
+                对于 Inter 模式，编码 MVD (运动矢量差分) 和参考帧索引；对于 Intra 模式，编码预测方向。
+            </li>
+            <li style="margin-top: 10px;"><strong style="color: var(--secondary);">② 亮度与色度的残差处理 (Luma & Chroma Residuals):</strong> <br>
+                如果 <code>root_cbf == 1</code>，则进入 TU (Transform Unit) 变换树。HEVC 中，YUV 通道的残差系数是**严格按顺序**从 Level Residual FIFO 读取并编码的。
+                <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; margin-top: 8px;">
+                    <strong>严格的时序处理顺序:</strong> <code>Luma (Y)</code> ➔ <code>Chroma Cb (U)</code> ➔ <code>Chroma Cr (V)</code><br>
+                    <strong>4:2:0 降采样映射关系:</strong> 当前叶子 CU 的亮度块大小为 <strong id="luma-size" style="color: #ef4444;">--</strong>，由于 4:2:0 色度抽样格式，它将关联 <strong id="chroma-size" style="color: #f59e0b;">--</strong> 大小的 Cb 块和 Cr 块。<br>
+                    CABAC 会依次为这些块编码 <code>cbf_luma</code>, <code>cbf_cb</code>, <code>cbf_cr</code>。当对应的 cbf=1 时，才会将非零的残差系数量化值写入码流。
+                </div>
+            </li>
+        </ul>
+    </div>
 
     <h2>3. CABAC 数学归一化引擎 (Renormalization)</h2>
     <p>CABAC 的魔法在于算术编码，它维护着两个核心物理寄存器：<code>Range</code> (当前概率区间的宽度) 和 <code>Low</code> (区间的起点)。当概率区间随着编码不断被切分而缩小，当 <code>Range</code> 小于一个阈值（<code>0x100</code> 即 256）时，硬件就必须执行<strong>归一化 (Renormalization)</strong> 动作，也就是把编码结果“挤”到码流里去。</p>
