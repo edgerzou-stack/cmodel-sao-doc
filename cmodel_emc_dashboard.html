@@ -610,6 +610,75 @@
         });
     </script>
 
+    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">4. 熵编码核心字典：CU 级语法元素速查表</h2>
+    <p>CABAC 引擎每天都在疯狂地咀嚼各种“语法元素”。为了方便后续开发和 Debug，我为你整理了 HEVC 中最核心的 CU/PU/TU 级别语法元素及其对应的二值化武器和上下文依赖：</p>
+
+    <div style="overflow-x: auto; margin-top: 20px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; background: #fff; font-size: 0.95em;">
+            <thead>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; color: #334155;">
+                    <th style="padding: 15px;">语法元素 (Syntax Element)</th>
+                    <th style="padding: 15px;">含义说明</th>
+                    <th style="padding: 15px;">二值化算法</th>
+                    <th style="padding: 15px;">上下文模型依赖 (Context)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- CU 层 -->
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 15px; font-weight: bold; color: #0f172a;">split_cu_flag</td>
+                    <td style="padding: 15px; color: #475569;">当前 CU 是否继续四叉树划分</td>
+                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px; font-size: 0.9em; color: #64748b;">当前块深度 (Depth) 以及上方、左侧块的划分状态</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0; background: #fdfdfd;">
+                    <td style="padding: 15px; font-weight: bold; color: #0f172a;">cu_skip_flag</td>
+                    <td style="padding: 15px; color: #475569;">是否为 Skip 模式 (无残差、共享MV)</td>
+                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px; font-size: 0.9em; color: #64748b;">相邻块的 Skip 状态</td>
+                </tr>
+                <!-- PU 层 -->
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 15px; font-weight: bold; color: #0f172a;">pred_mode_flag</td>
+                    <td style="padding: 15px; color: #475569;">预测模式：帧内 (Intra) 还是 帧间 (Inter)</td>
+                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px; font-size: 0.9em; color: #64748b;">固定上下文 (通常不依赖周边)</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0; background: #fdfdfd;">
+                    <td style="padding: 15px; font-weight: bold; color: #0f172a;">part_mode</td>
+                    <td style="padding: 15px; color: #475569;">PU 划分模式 (2Nx2N, 2NxN, Nx2N 等)</td>
+                    <td style="padding: 15px; color: #0284c7;">一元码 (Unary) 等</td>
+                    <td style="padding: 15px; font-size: 0.9em; color: #64748b;">当前 CU 的尺寸大小</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 15px; font-weight: bold; color: #0f172a;">mvd</td>
+                    <td style="padding: 15px; color: #475569;">运动矢量差分 (绝对值和符号)</td>
+                    <td style="padding: 15px; color: #d97706;">k阶指数哥伦布 (EGk)</td>
+                    <td style="padding: 15px; font-size: 0.9em; color: #64748b;">首部 Bin 用上下文，后续巨大的数值部分走 Bypass 模式直接编码</td>
+                </tr>
+                <!-- TU 层 -->
+                <tr style="border-bottom: 1px solid #e2e8f0; background: #fdfdfd;">
+                    <td style="padding: 15px; font-weight: bold; color: #0f172a;">rq_root_cbf</td>
+                    <td style="padding: 15px; color: #475569;">当前块是否存在任何非零残差</td>
+                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px; font-size: 0.9em; color: #64748b;">无特殊空间依赖</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 15px; font-weight: bold; color: #0f172a;">sig_coeff_flag</td>
+                    <td style="padding: 15px; color: #475569;">该坐标上的量化系数是否为非零</td>
+                    <td style="padding: 15px; color: #0284c7;">固定长度 (FL)</td>
+                    <td style="padding: 15px; font-size: 0.9em; color: #b91c1c;"><strong>极度复杂</strong>：依赖周边系数能量、所在的对角线位置等</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0; background: #fdfdfd;">
+                    <td style="padding: 15px; font-weight: bold; color: #0f172a;">coeff_abs_level_remaining</td>
+                    <td style="padding: 15px; color: #475569;">系数绝对值的剩余巨大数值</td>
+                    <td style="padding: 15px; color: #c026d3;">截断莱斯 (TR) + EGk</td>
+                    <td style="padding: 15px; font-size: 0.9em; color: #64748b;">全部走 Bypass 模式 (旁路模式，为了硬件高吞吐)</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
 </div>
 </div>
 
