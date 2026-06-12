@@ -133,7 +133,7 @@
         假设进入迭代寻优：<br>
         尝试 <strong>offset = 4</strong>：<code>&Delta;Dist = 8 * 4&sup2; - 32 * 4 * 2 = 128 - 256 = -128</code>。需要传输的码率 <code>Rate &asymp; 4</code> 位，<code>Cost&harr;4 = -128 + 4 * &lambda;</code>。<br>
         尝试 <strong>offset = 3</strong>：<code>&Delta;Dist = 8 * 3&sup2; - 32 * 3 * 2 = 72 - 192 = -120</code>。需要传输的码率 <code>Rate &asymp; 3</code> 位，<code>Cost&harr;3 = -120 + 3 * &lambda;</code>。<br>
-        如果 <code>&lambda;</code> 较小（即看重画质），算法会最终确定偏移量为 <strong>4</strong>；如果 <code>&lambda;</code> 很大（码率吃紧，大于 8），则可能退化选择 <strong>3</strong>，以此类推。
+        如果 <code>&lambda;</code> 较小（即看重画质），算法会最终确定偏移量为 <strong>4</strong>；如果 <code>&lambda;</code> 很大（码率吃紧，大于 8），则可能退化选择 <strong>3</strong>。代码中包含一个 <code>while (iterOffset != 0)</code> 的循环，会按照 4、3、2、1 的顺序一直尝试到 <strong>0</strong> 为止，最终选取整个过程中 Cost 最小的那一个。
     </div>
 
     <h2>3. Edge Offset (EO - 边缘偏移) 模式</h2>
