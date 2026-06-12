@@ -719,6 +719,41 @@
         </p>
     </div>
 
+    <h2 style="border-top: 2px solid #e2e8f0; padding-top: 30px; margin-top: 40px; color: var(--primary);">6. 大一统：编解码的完美对称之美</h2>
+    <p style="font-size: 0.95em; color: #475569;">为了让你对“语法元素是如何变成码流，又如何从码流中复活”有一个全局的体感，我为你绘制了最后这张 <strong>CABAC 编解码对称架构图</strong>。你可以清晰地看到，解码器在做的所有事情，就是把编码器走过的路，原封不动地倒着走一遍：</p>
+
+    <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
+        <div class="mermaid" style="display:flex; justify-content:center; overflow-x:auto;">
+            %%{init: {'theme': 'base', 'themeVariables': { 'primaryTextColor': '#1e293b', 'fontFamily': 'Inter, sans-serif' }}}%%
+            graph TD
+                subgraph Encoder [编码端流水线 Encoder]
+                    direction LR
+                    SE_E(语法元素 <br> e.g. MVD=1) -->|1. 二值化 <br> Binarization| BIN_E(Bin 数组 <br> 1,0,0)
+                    BIN_E -->|2. 算术编码 <br> Arith Encoding| BITS_E(纯比特流 <br> 01011...)
+                end
+                
+                BITS_E -->|网络传输 / 硬盘存储| BITS_D
+                
+                subgraph Decoder [解码端流水线 Decoder]
+                    direction LR
+                    BITS_D(纯比特流 <br> 01011...) -->|1. 算术解码 <br> Arith Decoding| BIN_D(Bin 数组 <br> 1,0,0)
+                    BIN_D -->|2. 反二值化 <br> Debinarization| SE_D(语法元素 <br> e.g. MVD=1)
+                end
+                
+                classDef default fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,color:#334155,rx:8,ry:8;
+                classDef enc fill:#e0f2fe,stroke:#38bdf8,color:#0369a1,stroke-width:2px;
+                classDef dec fill:#dcfce7,stroke:#4ade80,color:#15803d,stroke-width:2px;
+                classDef trans fill:#fee2e2,stroke:#f87171,color:#b91c1c,stroke-width:2px;
+                
+                class SE_E,BIN_E enc;
+                class BITS_E,BITS_D trans;
+                class BIN_D,SE_D dec;
+                
+                style Encoder fill:#f0f9ff,stroke:#bae6fd,stroke-dasharray: 5 5;
+                style Decoder fill:#f0fdf4,stroke:#bbf7d0,stroke-dasharray: 5 5;
+        </div>
+    </div>
+
 </div>
 </div>
 
