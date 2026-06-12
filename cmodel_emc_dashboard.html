@@ -347,6 +347,72 @@
         </ul>
     </div>
 
+    <h3>2.3 CABAC 语法元素解析状态机 (CABAC Syntax Parsing FSM)</h3>
+    <p>为了搞清楚上述信息的编码时序，硬件引擎内部运行着一个极其严密的**状态机 (FSM)**。每一个状态负责提取一种语法元素，并更新 CABAC 概率模型，最终驱动底层的 Range/Low 引擎进行比特挤压。以下是它在一颗 CU 节点上的流转全景图：</p>
+    
+    <div class="mermaid">
+    graph TD
+        START[开始编码 CU] --> ST_SPLIT{"1. ST_CU_SPLIT\n(算 split_flag)"}
+        ST_SPLIT -- "split_flag == 1" --> DO_SPLIT[进栈，划分为 4 个子 CU]
+        ST_SPLIT -- "split_flag == 0" --> ST_SKIP{"2. ST_SKIP\n(算 cu_skip_flag)"}
+        
+        ST_SKIP -- "skip == 1" --> ST_MERGE_IDX["ST_MERGE_IDX\n(算 merge_idx)"]
+        ST_MERGE_IDX --> END_CU[结束当前 CU 编码]
+        
+        ST_SKIP -- "skip == 0" --> ST_PRED_MODE{"3. ST_PRED_MODE\n(算 Intra/Inter)"}
+        
+        ST_PRED_MODE -- "Intra" --> ST_INTRA_DIR["4a. ST_INTRA_DIR\n(算 Luma/Chroma 预测方向)"]
+        ST_PRED_MODE -- "Inter" --> ST_PU_INFO["4b. ST_PU_INFO\n(算 MVD, RefIdx, MergeFlag)"]
+        
+        ST_INTRA_DIR --> ST_ROOT_CBF{"5. ST_ROOT_CBF\n(算 rQtCbf)"}
+        ST_PU_INFO --> ST_ROOT_CBF
+        
+        ST_ROOT_CBF -- "root_cbf == 0" --> END_CU
+        ST_ROOT_CBF -- "root_cbf == 1" --> ST_TU_TREE["6. ST_TU_TREE\n(递归处理变换树)"]
+        
+        ST_TU_TREE --> ST_CBF["7. ST_CBF\n(算 cbf_luma, cbf_cb, cbf_cr)"]
+        
+        ST_CBF --> ST_COEFF["8. ST_COEFF\n(算 SigMap, Abs, Sign)"]
+        ST_COEFF --> END_CU
+        
+        classDef state fill:#f8fafc,stroke:#0288d1,stroke-width:2px,color:#333;
+        classDef cond fill:#e0f2fe,stroke:#0277bd,stroke-width:2px,color:#333;
+        classDef endst fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#333;
+        class START,DO_SPLIT,ST_MERGE_IDX,ST_INTRA_DIR,ST_PU_INFO,ST_TU_TREE,ST_CBF,ST_COEFF state;
+        class ST_SPLIT,ST_SKIP,ST_PRED_MODE,ST_ROOT_CBF cond;
+        class END_CU endst;
+    </div>
+
+    <div style="background: #ffffff; padding: 25px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 40px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
+        <h4 style="margin-top: 0; color: #333; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">状态机核算内容详解</h4>
+        <div style="display: grid; grid-template-columns: 150px 1fr; gap: 15px; font-size: 0.95em; line-height: 1.6; color: #475569;">
+            
+            <div style="font-weight: bold; color: var(--primary);">1. ST_CU_SPLIT</div>
+            <div><strong>计算目标：</strong> 当前宏块是否还要继续四叉树切分。<br><strong>结果用途：</strong> 指导空间树形 Z-Scan 状态机（上一节）是否执行进栈 (Depth++) 操作。</div>
+            <div style="grid-column: 1 / span 2; border-bottom: 1px dashed #e2e8f0;"></div>
+
+            <div style="font-weight: bold; color: var(--primary);">2. ST_SKIP</div>
+            <div><strong>计算目标：</strong> 当前宏块是否是 Skip 模式（没有任何残差，且运动矢量直接 Copy 相邻块）。<br><strong>结果用途：</strong> 属于“一票否决”状态。如果是 Skip，则直接跳过后续所有的 PU/TU 计算，只算一个 Merge Index 就结束。这是实现极高压缩率的核心。</div>
+            <div style="grid-column: 1 / span 2; border-bottom: 1px dashed #e2e8f0;"></div>
+
+            <div style="font-weight: bold; color: var(--primary);">3. ST_PRED_MODE</div>
+            <div><strong>计算目标：</strong> 是帧内预测 (Intra) 还是帧间预测 (Inter)。<br><strong>结果用途：</strong> 决定状态机进入左侧分支（处理空间纹理方向）还是右侧分支（处理时间运动矢量）。</div>
+            <div style="grid-column: 1 / span 2; border-bottom: 1px dashed #e2e8f0;"></div>
+
+            <div style="font-weight: bold; color: var(--primary);">4. PU_INFO 层级</div>
+            <div><strong>计算目标：</strong> 预测阶段的具体参数。对于 Intra，算 35 种预测方向；对于 Inter，算 <code>MVD (Motion Vector Difference)</code> 以及参考帧索引。<br><strong>结果用途：</strong> 解码器依靠这些信息来生成“预测图像”。</div>
+            <div style="grid-column: 1 / span 2; border-bottom: 1px dashed #e2e8f0;"></div>
+
+            <div style="font-weight: bold; color: var(--secondary);">5/6. ROOT_CBF / TU_TREE</div>
+            <div><strong>计算目标：</strong> 预测图和原图做差得到的“残差”是否为全 0 (<code>root_cbf</code>)。如果不是全 0，进入 TU 变换树。<br><strong>结果用途：</strong> 避免对全 0 的大块残差进行无效扫描。</div>
+            <div style="grid-column: 1 / span 2; border-bottom: 1px dashed #e2e8f0;"></div>
+
+            <div style="font-weight: bold; color: var(--secondary);">7/8. CBF / COEFF</div>
+            <div><strong>计算目标：</strong> 从 Level Residual FIFO 依次读取 <code>Luma</code>、<code>Cb</code>、<code>Cr</code> 的量化系数。对于非零块，计算 <code>Significant Map</code>（哪些位置有非零系数）、绝对值 <code>Abs</code> 和符号 <code>Sign</code>。<br><strong>结果用途：</strong> 这是 HEVC 中占据码流最大头的部分，CABAC 引擎会对非零系数的位置进行极致的概率上下文压缩。</div>
+
+        </div>
+    </div>
+
     <h2>3. CABAC 数学归一化引擎 (Renormalization)</h2>
     <p>CABAC 的魔法在于算术编码，它维护着两个核心物理寄存器：<code>Range</code> (当前概率区间的宽度) 和 <code>Low</code> (区间的起点)。当概率区间随着编码不断被切分而缩小，当 <code>Range</code> 小于一个阈值（<code>0x100</code> 即 256）时，硬件就必须执行<strong>归一化 (Renormalization)</strong> 动作，也就是把编码结果“挤”到码流里去。</p>
 
